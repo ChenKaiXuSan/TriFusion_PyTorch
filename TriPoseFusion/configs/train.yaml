@@ -14,7 +14,7 @@ paths:
 
 data:
   num_workers: 32
-  batch_size: 32
+  batch_size: 16
   uniform_temporal_subsample_num: 16
   magic_move: false # only used to choose index_magicmove.json when paths.index_file is empty
 
@@ -66,6 +66,14 @@ train:
   grad_clip_val: 1.0
   view: multi
   view_name: ['front', 'left', 'right']
+
+eval:
+  # Set ckpt_path for one explicit checkpoint, or ckpt_dir for a training log root.
+  ckpt_path: null
+  ckpt_dir: null
+  split: val # train, val, or test; test currently uses the val split in the datamodule.
+  fold: all # all or a single fold id, e.g. 0
+  output_dir: ${log_path}/eval
 
 experiment: geofusionpose_${train.view_name}_${data.uniform_temporal_subsample_num}f
 log_path: logs/train/${experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}

@@ -1,304 +1,251 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
-"""
-File: /workspace/code/project/eval.py
-Project: /workspace/code/project
-Created Date: Tuesday November 11th 2025
-Author: Kaixu Chen
------
-Comment:
+from __future__ import annotations
 
-Have a good code time :)
------
-Last Modified: Tuesday November 11th 2025 1:34:34 pm
-Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
------
-Copyright (c) 2025 The University of Tsukuba
------
-HISTORY:
-Date      	By	Comments
-----------	---	---------------------------------------------------------
-"""
-
-import os
-import re
-import glob
+import csv
 import json
-import time
-import math
 import logging
-from typing import Dict, List, Tuple, Optional
+import math
+import os
+from collections import defaultdict
+from pathlib import Path
+from typing import Any, Dict, Iterable, Optional
 
 import hydra
-from omegaconf import DictConfig
+import torch
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.callbacks import DeviceStatsMonitor, RichProgressBar
 from pytorch_lightning.loggers import CSVLogger
-from pytorch_lightning.callbacks import DeviceStatsMonitor
 
-# DataModule
-from project.dataloader.data_loader import DriverDataModule
-
-# Trainers (LightningModules)
-from project.trainer.baseline.train_3dcnn import Res3DCNNTrainer
-from project.trainer.mid.train_pose_attn import PoseAttnTrainer
-from project.trainer.early.train_early_fusion import EarlyFusion3DCNNTrainer
-from project.trainer.late.train_late_fusion import LateFusion3DCNNTrainer
-
-# K-fold splitter
-from project.cross_validation import DefineCrossValidation
+from dataloader.data_loader import DriverKPTDataModule
+from main import load_fold_dataset_idx_from_json
+from trainer.train_triple_fusion import GeoFusionPoseTrainer
 
 logger = logging.getLogger(__name__)
 
 
-def _select_module(hparams: DictConfig):
-    """Mirror the selection logic used in main.py"""
-    if hparams.model.backbone != "3dcnn":
-        raise ValueError("Only backbone='3dcnn' is supported in this eval script.")
-
-    fm = hparams.model.fuse_method
-    if fm == "pose_atn":
-        return PoseAttnTrainer(hparams)
-    elif fm in ["add", "mul", "concat", "avg"]:
-        return EarlyFusion3DCNNTrainer(hparams)
-    elif fm == "late":
-        return LateFusion3DCNNTrainer(hparams)
-    elif fm == "none":
-        return Res3DCNNTrainer(hparams)
-    else:
-        raise ValueError(f"Unsupported fuse_method: {fm}")
+def _cfg_get(config: DictConfig, path: str, default: Any = None) -> Any:
+    value = OmegaConf.select(config, path)
+    return default if value is None else value
 
 
-def _parse_ckpt_metric(path: str) -> Optional[Tuple[int, float, float]]:
-    """Parse epoch, val_loss, val_acc from checkpoint filename."""
+def _as_float(value: Any) -> Any:
+    if isinstance(value, torch.Tensor):
+        if value.numel() == 1:
+            return float(value.detach().cpu().item())
+        return value.detach().cpu().tolist()
+    if isinstance(value, (int, float, str, bool)) or value is None:
+        return value
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return value
 
-    base = os.path.basename(path)
-    epoch, vloss, vacc = base.split("-")[0:3]
-    vacc = vacc.replace(".ckpt", "")
 
-    return int(epoch), float(vloss), float(vacc)
+def _clean_metrics(metrics: Dict[str, Any]) -> Dict[str, Any]:
+    return {key: _as_float(value) for key, value in metrics.items()}
 
 
-def _find_best_ckpt_for_fold(log_path: str, fold: str | int) -> Optional[str]:
-    """
-    Search all version_* for this fold's checkpoints and pick the highest val/video_acc.
-    Fallback order:
-      1) best by parsed val/video_acc
-      2) last.ckpt
-      3) None (caller will run without pretrained weights)
-    """
-    fold_dir = os.path.join(log_path, str(fold))
-    if not os.path.isdir(fold_dir):
-        return None
-
-    # 1) collect all candidate ckpts with metrics in filename
-    pattern = os.path.join(fold_dir, "version_*", "checkpoints", "*.ckpt")
-    candidates = glob.glob(pattern)
-    best_path = None
-    best_acc = -math.inf
-
-    for p in candidates:
-        if "last.ckpt" in os.path.basename(p).lower():
+def _parse_val_loss_from_name(path: Path) -> Optional[float]:
+    """Parse val loss from names such as `12-0.34.ckpt` or `epoch=12-val/loss=0.34.ckpt`."""
+    stem = path.stem
+    for token in reversed(stem.replace("=", "-").split("-")):
+        try:
+            return float(token)
+        except ValueError:
             continue
-        parsed = _parse_ckpt_metric(p)
-        if parsed is None:
-            continue
-        _, _, vacc = parsed
-        if vacc > best_acc:
-            best_acc = vacc
-            best_path = p
-
-    if best_path is not None:
-        return best_path
-
-    # 2) try last.ckpt
-    last_candidates = [
-        p for p in candidates if os.path.basename(p).lower() == "last.ckpt"
-    ]
-    if last_candidates:
-        # if multiple, choose the newest by mtime
-        last_candidates.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-        return last_candidates[0]
-
-    # 3) nothing found
     return None
 
 
-def _aggregate(results: List[Dict[str, float]]) -> Dict[str, Dict[str, float]]:
-    """
-    Aggregate a list of test result dicts (one per fold).
-    Returns a dict: metric -> {"mean": ..., "std": ...}
-    Only aggregates keys starting with 'test/' and whose values are numbers.
-    """
-    from collections import defaultdict
-    import numpy as np
-
-    buckets = defaultdict(list)
-    for r in results:
-        for k, v in r.items():
-            if isinstance(v, (int, float)) and k.startswith("test/"):
-                buckets[k].append(float(v))
-
-    agg: Dict[str, Dict[str, float]] = {}
-    for k, arr in buckets.items():
-        if len(arr) == 0:
-            continue
-        m = float(np.mean(arr))
-        s = float(np.std(arr, ddof=0))
-        agg[k] = {"mean": m, "std": s}
-    return agg
+def _checkpoint_candidates(root: Path, fold: int) -> list[Path]:
+    patterns = [
+        root / "checkpoints" / f"fold_{fold}" / "*.ckpt",
+        root / "**" / "checkpoints" / f"fold_{fold}" / "*.ckpt",
+        root / f"fold_{fold}" / "**" / "*.ckpt",
+    ]
+    candidates: list[Path] = []
+    for pattern in patterns:
+        candidates.extend(Path(p) for p in root.glob(str(pattern.relative_to(root))))
+    return sorted(set(candidates))
 
 
-def _save_outputs(
-    out_dir: str,
-    fold_results: Dict[str, Dict[str, float]],
-    aggregate_stats: Dict[str, Dict[str, float]],
-) -> Tuple[str, str]:
-    os.makedirs(out_dir, exist_ok=True)
-    ts = time.strftime("%Y%m%d-%H%M%S")
-    json_path = os.path.join(out_dir, f"eval_results_{ts}.json")
-    csv_path = os.path.join(out_dir, f"eval_results_{ts}.csv")
+def _find_ckpt(config: DictConfig, fold: int) -> Optional[Path]:
+    explicit = _cfg_get(config, "eval.ckpt_path")
+    if explicit:
+        ckpt = Path(str(explicit)).expanduser()
+        if not ckpt.exists():
+            raise FileNotFoundError(f"eval.ckpt_path does not exist: {ckpt}")
+        return ckpt
 
-    # JSON
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "per_fold": fold_results,
-                "aggregate": aggregate_stats,
-                "created_at": ts,
-            },
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
+    ckpt_dir = _cfg_get(config, "eval.ckpt_dir") or _cfg_get(config, "log_path")
+    if not ckpt_dir:
+        return None
 
-    # CSV (flatten)
-    import csv
+    root = Path(str(ckpt_dir)).expanduser()
+    if not root.exists():
+        logger.warning("Checkpoint search directory does not exist: %s", root)
+        return None
 
-    # collect header
-    metric_names = set()
-    for _fold, metrics in fold_results.items():
-        metric_names.update([k for k in metrics.keys() if k.startswith("test/")])
-    metric_names = sorted(metric_names)
+    candidates = _checkpoint_candidates(root, fold)
+    if not candidates:
+        logger.warning("No checkpoint found for fold %s under %s", fold, root)
+        return None
 
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["fold"] + metric_names)
-        for fld, metrics in sorted(fold_results.items(), key=lambda x: str(x[0])):
-            row = [fld] + [metrics.get(m, "") for m in metric_names]
-            writer.writerow(row)
-        # add a blank line and aggregate
-        writer.writerow([])
-        writer.writerow(["metric", "mean", "std"])
-        for m in metric_names:
-            ms = aggregate_stats.get(m, {})
-            writer.writerow([m, ms.get("mean", ""), ms.get("std", "")])
+    non_last = [p for p in candidates if p.name != "last.ckpt"]
+    scored = [(p, _parse_val_loss_from_name(p)) for p in non_last]
+    scored = [(p, loss) for p, loss in scored if loss is not None and math.isfinite(loss)]
+    if scored:
+        return min(scored, key=lambda item: item[1])[0]
 
-    return json_path, csv_path
+    last = [p for p in candidates if p.name == "last.ckpt"]
+    if last:
+        return max(last, key=lambda p: p.stat().st_mtime)
+
+    return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
-def _make_trainer(hparams: DictConfig) -> Trainer:
-    """Minimal trainer for evaluation."""
+def _build_trainer(config: DictConfig) -> Trainer:
+    accelerator = "gpu" if torch.cuda.is_available() else "cpu"
+    devices = [int(config.train.gpu)] if accelerator == "gpu" else 1
+    output_dir = Path(str(_cfg_get(config, "eval.output_dir", Path(config.log_path) / "eval")))
+
     return Trainer(
-        devices=[int(hparams.train.gpu)],
-        accelerator="gpu",
-        logger=CSVLogger(
-            save_dir=os.path.join(hparams.train.log_path, "eval_csv_logs"),
-            name="eval",
-        ),
-        callbacks=[DeviceStatsMonitor()],
+        accelerator=accelerator,
+        devices=devices,
+        logger=CSVLogger(save_dir=str(output_dir), name="csv_logs"),
+        callbacks=[RichProgressBar(leave=True), DeviceStatsMonitor()],
+        enable_checkpointing=False,
     )
 
 
-def _eval_one_fold(hparams: DictConfig, dataset_idx, fold: int) -> Dict[str, float]:
-    """Run test() for one fold and return the metrics dict."""
-    seed_everything(42, workers=True)
-
-    # module and data
-    module = _select_module(hparams)
-    datamodule = WalkDataModule(hparams, dataset_idx)
-
-    # locate ckpt
-    ckpt = _find_best_ckpt_for_fold(hparams.eval.input_path, fold)
-    if ckpt:
-        logger.info(f"[fold {fold}] Using checkpoint: {ckpt}")
-    else:
-        logger.warning(
-            f"[fold {fold}] No checkpoint found. Running test() with randomly initialized weights."
+def _run_split(
+    trainer: Trainer,
+    module: GeoFusionPoseTrainer,
+    data_module: DriverKPTDataModule,
+    ckpt_path: Path,
+    split: str,
+) -> Dict[str, Any]:
+    if split == "val":
+        result = trainer.validate(module, datamodule=data_module, ckpt_path=str(ckpt_path))
+    elif split == "test":
+        result = trainer.test(module, datamodule=data_module, ckpt_path=str(ckpt_path))
+    elif split == "train":
+        data_module.setup("fit")
+        result = trainer.validate(
+            module,
+            dataloaders=data_module.train_dataloader(),
+            ckpt_path=str(ckpt_path),
         )
-
-    trainer = _make_trainer(hparams)
-
-    # Run test
-    if ckpt:
-        test_out = trainer.test(module, datamodule, ckpt_path=ckpt)
     else:
-        test_out = trainer.test(module, datamodule)
+        raise ValueError(f"Unsupported eval.split={split!r}. Use train, val, or test.")
 
-    # PL returns a list[dict]; typically len==1 unless multiple test loaders
-    if not test_out:
-        logger.warning(f"[fold {fold}] Empty test result; returning empty dict.")
-        return {}
+    merged: Dict[str, Any] = {}
+    for item in result or []:
+        merged.update(item)
+    metrics = _clean_metrics(merged)
+    if split == "train":
+        metrics = {
+            key.replace("val/", "train/", 1) if key.startswith("val/") else key: value
+            for key, value in metrics.items()
+        }
+    return metrics
 
-    # If multiple dicts, merge keys by later overwriting (usually fine)
-    merged: Dict[str, float] = {}
-    for d in test_out:
-        merged.update(d)
-    return merged
+
+def _aggregate(per_fold: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    buckets: Dict[str, list[float]] = defaultdict(list)
+    for metrics in per_fold.values():
+        for key, value in metrics.items():
+            if isinstance(value, (int, float)):
+                buckets[key].append(float(value))
+
+    aggregate: Dict[str, Dict[str, float]] = {}
+    for key, values in buckets.items():
+        if not values:
+            continue
+        mean = sum(values) / len(values)
+        var = sum((value - mean) ** 2 for value in values) / len(values)
+        aggregate[key] = {"mean": mean, "std": math.sqrt(var), "n": len(values)}
+    return aggregate
 
 
-@hydra.main(
-    version_base=None,
-    config_path="../configs",
-    config_name="eval.yaml",
-)
-def main(config: DictConfig):
-    """
-    K-fold evaluation:
-    - Split folds using DefineCrossValidation(config)()
-    - For each fold, load best ckpt if available and run trainer.test
-    - Save per-fold results and aggregate mean/std to log_path
-    """
-    # Prepare folds
-    fold_dataset_idx = DefineCrossValidation(config)()
-    logger.info("#" * 60)
-    logger.info("Start EVALUATION over all folds")
-    logger.info("#" * 60)
+def _save_results(
+    output_dir: Path,
+    per_fold: Dict[str, Dict[str, Any]],
+    aggregate: Dict[str, Dict[str, float]],
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / "eval_metrics.json"
+    csv_path = output_dir / "eval_metrics.csv"
 
-    per_fold_results: Dict[str, Dict[str, float]] = {}
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump({"per_fold": per_fold, "aggregate": aggregate}, f, indent=2)
 
-    for fold, dataset_value in fold_dataset_idx.items():
-        logger.info("#" * 60)
-        logger.info(f"Evaluating fold: {fold}")
-        logger.info("#" * 60)
+    metric_names = sorted({key for metrics in per_fold.values() for key in metrics})
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["fold"] + metric_names)
+        for fold, metrics in sorted(per_fold.items(), key=lambda item: int(item[0])):
+            writer.writerow([fold] + [metrics.get(name, "") for name in metric_names])
+        writer.writerow([])
+        writer.writerow(["metric", "mean", "std", "n"])
+        for metric, stats in sorted(aggregate.items()):
+            writer.writerow([metric, stats["mean"], stats["std"], stats["n"]])
 
-        metrics = _eval_one_fold(config, dataset_value, fold)
-        per_fold_results[str(fold)] = metrics
+    logger.info("Saved eval metrics JSON: %s", json_path)
+    logger.info("Saved eval metrics CSV : %s", csv_path)
 
-        # Pretty print small summary
-        if metrics:
-            nice = {
-                k: round(v, 6)
-                for k, v in metrics.items()
-                if isinstance(v, (int, float))
-            }
-            logger.info(f"[fold {fold}] test metrics: {nice}")
-        else:
-            logger.info(f"[fold {fold}] No metrics returned.")
 
-    # Aggregate
-    aggregate_stats = _aggregate(list(per_fold_results.values()))
+def _selected_folds(config: DictConfig, all_folds: Iterable[int]) -> list[int]:
+    fold = _cfg_get(config, "eval.fold")
+    if fold is None or str(fold).lower() == "all":
+        return sorted(int(item) for item in all_folds)
+    return [int(fold)]
 
-    logger.info("#" * 60)
-    logger.info("Aggregate (mean ± std) for test/* metrics:")
-    for m, s in sorted(aggregate_stats.items()):
-        logger.info(f"  {m}: mean={s['mean']:.6f}, std={s['std']:.6f}")
-    logger.info("#" * 60)
 
-    # Save
-    out_dir = config.eval.log_path
-    json_path, csv_path = _save_outputs(out_dir, per_fold_results, aggregate_stats)
-    logger.info(f"Saved evaluation results:\n  JSON: {json_path}\n  CSV : {csv_path}")
-    logger.info("Finished EVALUATION over all folds.")
+@hydra.main(version_base=None, config_path="configs", config_name="train.yaml")
+def main(config: DictConfig) -> None:
+    seed_everything(42, workers=True)
+    torch.set_float32_matmul_precision("high")
+
+    split = str(_cfg_get(config, "eval.split", "val")).lower()
+    output_dir = Path(str(_cfg_get(config, "eval.output_dir", Path(config.log_path) / "eval")))
+    fold_dataset_idx = load_fold_dataset_idx_from_json(config)
+
+    per_fold: Dict[str, Dict[str, Any]] = {}
+    for fold in _selected_folds(config, fold_dataset_idx.keys()):
+        if fold not in fold_dataset_idx:
+            raise KeyError(f"Fold {fold} is not in the dataset index JSON.")
+
+        ckpt = _find_ckpt(config, fold)
+        if ckpt is None:
+            raise FileNotFoundError(
+                f"No checkpoint found for fold {fold}. Set eval.ckpt_path or eval.ckpt_dir."
+            )
+
+        logger.info("%s", "#" * 60)
+        logger.info("Evaluating fold %s on %s split", fold, split)
+        logger.info("Checkpoint: %s", ckpt)
+        logger.info("%s", "#" * 60)
+
+        module = GeoFusionPoseTrainer(config)
+        data_module = DriverKPTDataModule(config, fold_dataset_idx[fold])
+        trainer = _build_trainer(config)
+        metrics = _run_split(trainer, module, data_module, ckpt, split)
+        metrics["ckpt_path"] = str(ckpt)
+        per_fold[str(fold)] = metrics
+
+        numeric = {key: round(value, 6) for key, value in metrics.items() if isinstance(value, (int, float))}
+        logger.info("Fold %s metrics: %s", fold, numeric)
+
+    aggregate = _aggregate(per_fold)
+    logger.info("%s", "#" * 60)
+    logger.info("Aggregate metrics")
+    for metric, stats in sorted(aggregate.items()):
+        logger.info("%s: mean=%.6f, std=%.6f, n=%d", metric, stats["mean"], stats["std"], stats["n"])
+    logger.info("%s", "#" * 60)
+
+    _save_results(output_dir, per_fold, aggregate)
 
 
 if __name__ == "__main__":

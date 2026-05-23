@@ -13,7 +13,6 @@ import torch
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import (
-    DeviceStatsMonitor,
     LearningRateMonitor,
     ModelCheckpoint,
     RichModelSummary,
@@ -130,7 +129,6 @@ def train_one_fold(hparams: DictConfig, dataset_idx: Dict[str, list[VideoSample]
             RichModelSummary(max_depth=3),
             checkpoint,
             LearningRateMonitor(logging_interval="step"),
-            DeviceStatsMonitor(),
         ],
     )
 
