@@ -8,5 +8,20 @@
 			"name": "data",
 			"path": "/workspace/data"
 		},
-	]
+	],
+	"settings": {
+		"python-envs.pythonProjects": [
+			{
+				"path": ".",
+				"envManager": "ms-python.python:conda",
+				"packageManager": "ms-python.python:conda"
+			},
+			{
+				"path": "TriPoseFusion",
+				"envManager": "ms-python.python:venv",
+				"packageManager": "ms-python.python:pip",
+				"workspace": "code"
+			}
+		]
+	}
 }

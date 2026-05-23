@@ -1,0 +1,71 @@
+# GeoFusionPose training config
+hydra:
+  run:
+    dir: ${log_path}
+  sweep:
+    dir: logs/
+    subdir: ${experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+paths:
+  root_path: /workspace/data/multi_view_driver_action
+  index_mapping: ${paths.root_path}/index_mapping # folder or full path to prebuilt fold index json
+  index_file: index.json # used only when index_mapping is a folder
+  sam3d_results_path: /workspace/data/sam3d_body_results_right_full
+
+data:
+  num_workers: 32
+  batch_size: 32
+  uniform_temporal_subsample_num: 16
+  magic_move: false # only used to choose index_magicmove.json when paths.index_file is empty
+
+loss:
+  lr: 0.0001
+  weight_decay: 0.00001
+
+model:
+  backbone: triple_fusion
+
+  # Input layout: raw SAM3D 70 keypoints from dataloader.
+  geofusion_view_names: ['front', 'left', 'right']
+  geofusion_num_joints: 70
+  kpt_neck_index: 69
+  kpt_left_shoulder_index: 5
+  kpt_right_shoulder_index: 6
+  kpt_mid_hip_index: -1
+
+  # GeoFusionPose network.
+  geofusion_hidden_dim: 128
+  geofusion_refiner_dim: 256
+  geofusion_refiner_layers: 2
+  geofusion_dropout: 0.1
+  geofusion_use_2d: true
+  geofusion_use_conf: false
+  geofusion_use_reproj_error_feature: false
+  geofusion_canonicalize: true
+  geofusion_eps: 0.000001
+  geofusion_nce_dim: 64
+
+  # Self-supervised loss weights. No camera parameters, so reprojection is off.
+  lambda_tri: 1.0
+  lambda_reproj: 0.0
+  lambda_view: 0.2
+  lambda_bone: 0.5
+  lambda_temp: 0.1
+  lambda_info_nce: 0.1
+  info_nce_temperature: 0.1
+
+  # Optional bone pairs on raw 70-keypoint layout.
+  geofusion_bones:
+    - [5, 6]
+    - [69, 5]
+    - [69, 6]
+
+train:
+  max_epochs: 50
+  gpu: 0
+  grad_clip_val: 1.0
+  view: multi
+  view_name: ['front', 'left', 'right']
+
+experiment: geofusionpose_${train.view_name}_${data.uniform_temporal_subsample_num}f
+log_path: logs/train/${experiment}/${now:%Y-%m-%d}/${now:%H-%M-%S}

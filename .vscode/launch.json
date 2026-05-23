@@ -39,6 +39,23 @@
         "train.gpu=1",
         "data.batch_size=2",
       ]
+    },
+    {
+      "name": "multi_fuse",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "TriPoseFusion/main.py",
+      "cwd": "/workspace/MultiView_DriverAction_PyTorch/",
+      "python": "/opt/conda/envs/multiview-video-cls/bin/python",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": [
+        "data.num_workers=1",
+        "train.view=multi",
+        "train.view_name=['front', 'left', 'right']",
+        "train.gpu=1",
+        "data.batch_size=2",
+      ]
     }
   ]
 }
