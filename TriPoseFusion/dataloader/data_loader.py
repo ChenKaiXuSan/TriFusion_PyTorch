@@ -79,7 +79,9 @@ class DriverKPTDataModule(LightningDataModule):
             for view in self.view_name:
                 tensor = view_dict.get(view)
                 if tensor is not None:
-                    by_view[view].append(self._uniform_kpt_frames(tensor, target_t))
+                    if target_t > 0 and tensor.shape[0] != target_t:
+                        tensor = self._uniform_kpt_frames(tensor, target_t)
+                    by_view[view].append(tensor)
 
         return {
             view: torch.stack(items, dim=0) if items else None

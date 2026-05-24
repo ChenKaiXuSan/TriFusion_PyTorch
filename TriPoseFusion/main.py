@@ -42,7 +42,9 @@ def _resolve_index_json(config: DictConfig) -> Path:
         index_file = index_mapping / index_name
     else:
         use_magic = bool(getattr(config.data, "magic_move", False))
-        index_file = index_mapping / ("index_magicmove.json" if use_magic else "index.json")
+        index_file = index_mapping / (
+            "index_magicmove.json" if use_magic else "index.json"
+        )
 
     if not index_file.exists():
         raise FileNotFoundError(
@@ -67,7 +69,9 @@ def _sample_from_json(item: Dict[str, Any]) -> VideoSample:
     )
 
 
-def load_fold_dataset_idx_from_json(config: DictConfig) -> Dict[int, Dict[str, list[VideoSample]]]:
+def load_fold_dataset_idx_from_json(
+    config: DictConfig,
+) -> Dict[int, Dict[str, list[VideoSample]]]:
     index_file = _resolve_index_json(config)
     logger.info("Loading fold dataset index from JSON: %s", index_file)
 
@@ -93,7 +97,9 @@ def build_module(hparams: DictConfig) -> GeoFusionPoseTrainer:
     return GeoFusionPoseTrainer(hparams)
 
 
-def train_one_fold(hparams: DictConfig, dataset_idx: Dict[str, list[VideoSample]], fold: int) -> None:
+def train_one_fold(
+    hparams: DictConfig, dataset_idx: Dict[str, list[VideoSample]], fold: int
+) -> None:
     seed_everything(42, workers=True)
 
     module = build_module(hparams)
@@ -119,8 +125,9 @@ def train_one_fold(hparams: DictConfig, dataset_idx: Dict[str, list[VideoSample]
     )
 
     trainer = Trainer(
-        devices=[int(hparams.train.gpu)],
+        devices=str(hparams.train.devices),
         accelerator="gpu",
+        strategy="auto",
         max_epochs=hparams.train.max_epochs,
         logger=[tb_logger, csv_logger],
         check_val_every_n_epoch=1,
@@ -133,9 +140,13 @@ def train_one_fold(hparams: DictConfig, dataset_idx: Dict[str, list[VideoSample]
     )
 
     trainer.fit(module, data_module)
-    test_metrics = trainer.test(module, data_module, ckpt_path="best", weights_only=False)
+    test_metrics = trainer.test(
+        module, data_module, ckpt_path="best", weights_only=False
+    )
     logger.info("Test metrics for fold %d: %s", fold, test_metrics)
-    with open(os.path.join(tb_logger.log_dir, "test_metrics.json"), "w", encoding="utf-8") as f:
+    with open(
+        os.path.join(tb_logger.log_dir, "test_metrics.json"), "w", encoding="utf-8"
+    ) as f:
         json.dump(test_metrics, f, indent=4)
 
 

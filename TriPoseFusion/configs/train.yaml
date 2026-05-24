@@ -14,7 +14,7 @@ paths:
 
 data:
   num_workers: 32
-  batch_size: 16
+  batch_size: 24
   uniform_temporal_subsample_num: 16
   magic_move: false # only used to choose index_magicmove.json when paths.index_file is empty
 
@@ -62,7 +62,7 @@ model:
 
 train:
   max_epochs: 50
-  gpu: 0
+  devices: 1
   grad_clip_val: 1.0
   view: multi
   view_name: ['front', 'left', 'right']

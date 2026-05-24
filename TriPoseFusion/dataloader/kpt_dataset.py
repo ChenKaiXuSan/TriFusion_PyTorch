@@ -46,6 +46,7 @@ class KPTDataset(Dataset):
 
         self._kpt_cache: OrderedDict[Tuple[str, int, Optional[int]], Dict[str, torch.Tensor]] = OrderedDict()
         self._cache_max_size = 128
+        self._file_list_cache: Dict[str, List[Path]] = {}
 
         self._chunked_index: List[Dict[str, Any]] = []
         if self.chunk_frames is not None:
@@ -64,7 +65,10 @@ class KPTDataset(Dataset):
         return len(self._valid_source_indices)
 
     def _sorted_npz_files(self, kpt_dir: Path) -> List[Path]:
-        return sorted(kpt_dir.glob("*_sam3d_body.npz"))
+        cache_key = str(kpt_dir)
+        if cache_key not in self._file_list_cache:
+            self._file_list_cache[cache_key] = sorted(kpt_dir.glob("*_sam3d_body.npz"))
+        return self._file_list_cache[cache_key]
 
     def _count_frames_for_view(self, kpt_dir: Path) -> int:
         if not kpt_dir.exists():
@@ -141,11 +145,11 @@ class KPTDataset(Dataset):
         kpt3d_list: List[np.ndarray] = []
 
         for path in npz_files[start_idx:end_idx]:
-            obj = np.load(path, allow_pickle=True)
-            if "output" not in obj:
-                raise RuntimeError(f"Missing 'output' key in {path}")
+            with np.load(path, allow_pickle=True) as obj:
+                if "output" not in obj:
+                    raise RuntimeError(f"Missing 'output' key in {path}")
 
-            output = obj["output"].item()
+                output = obj["output"].item()
             if not isinstance(output, dict):
                 raise RuntimeError(f"Invalid SAM3D output format in {path}")
 
@@ -171,12 +175,10 @@ class KPTDataset(Dataset):
 
         kpt2d = torch.from_numpy(np.stack(kpt2d_list, axis=0))
         kpt3d = torch.from_numpy(np.stack(kpt3d_list, axis=0))
-        kpt_all = torch.cat([kpt2d, kpt3d], dim=-1)
 
         payload = {
-            "kpt": kpt_all,      # (T, K, 5)
-            "kpt_2d": kpt2d,     # (T, K, 2)
-            "kpt_3d": kpt3d,     # (T, K, 3)
+            "kpt_2d": kpt2d,  # (T, K, 2)
+            "kpt_3d": kpt3d,  # (T, K, 3)
         }
 
         self._kpt_cache[cache_key] = payload
@@ -225,8 +227,7 @@ class KPTDataset(Dataset):
                 f"sam3d_kpts is missing for person={item.person_id}, env={item.env_folder}"
             )
 
-        requested_views = set(self.view_name)
-        missing_views = [v for v in requested_views if v not in item.sam3d_kpts]
+        missing_views = [v for v in self.view_name if v not in item.sam3d_kpts]
         if missing_views:
             raise RuntimeError(
                 f"Missing requested sam3d views {missing_views} for person={item.person_id}, env={item.env_folder}"
@@ -235,9 +236,7 @@ class KPTDataset(Dataset):
         sam3d_kpt_2d: Dict[str, torch.Tensor] = {}
         sam3d_kpt_3d: Dict[str, torch.Tensor] = {}
 
-        for view in ["front", "left", "right"]:
-            if view not in requested_views:
-                continue
+        for view in self.view_name:
             payload = self._load_one_view_kpts(item.sam3d_kpts[view], start_frame, end_frame)
             sam3d_kpt_2d[view] = self._uniform_temporal_sample(payload["kpt_2d"], self.target_t)
             sam3d_kpt_3d[view] = self._uniform_temporal_sample(payload["kpt_3d"], self.target_t)
