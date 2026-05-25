@@ -1,21 +1,19 @@
 #!/bin/bash
-#PBS -A SSR
+#PBS -A SKIING
 #PBS -q gpu
 #PBS -l elapstim_req=24:00:00
 #PBS -N run_trid_pose_fusion
-#PBS -o logs/pegasus/run_trid_pose_fusion.log
-#PBS -e logs/pegasus/run_trid_pose_fusion_err.log
-
-set -eo pipefail
+#PBS -o ${PROJECT_DIR}/logs/pegasus/run_trid_pose_fusion.log
+#PBS -e ${PROJECT_DIR}/logs/pegasus/run_trid_pose_fusion_err.log
 
 # === 切换到项目目录 ===
-PROJECT_DIR=/work/SSR/share/code/MultiView_DriverAction_PyTorch
+PROJECT_DIR=/work/SKIING/chenkaixu/code/MultiView_DriverAction_PyTorch
 cd "${PROJECT_DIR}"
 
-mkdir -p logs/pegasus/
+mkdir -p ${PROJECT_DIR}/logs/pegasus/
 
 # === 加载 Python + 激活 Conda 环境 ===
-source activate /home/SSR/luoxi/miniconda3/envs/multiview-video-cls
+source activate /home/SKIING/chenkaixu/miniconda3/envs/direction
 conda env list
 
 # === 打印运行环境，方便排查超算日志 ===
@@ -28,26 +26,23 @@ echo "Current virtual environment: $(which python)"
 export PYTHONPATH="${PROJECT_DIR}/TriPoseFusion:${PROJECT_DIR}:${PYTHONPATH:-}"
 
 # === TriPoseFusion 训练参数 ===
-root_path=/work/SSR/share/data/drive/multi_view_driver_action
+root_path=/work/SKIING/chenkaixu/data/drive
 index_mapping=${root_path}/index_mapping
-index_file=index.json
-sam3d_results_path=/work/SSR/share/data/drive/sam3d_body_results_right_full
+sam3d_results_path=/work/SKIING/chenkaixu/data/drive/sam3d_body_results_right
 
 num_workers=16
-batch_size=22
+batch_size=64
 uniform_temporal_subsample_num=16
 max_epochs=50
 devices=1
 
 echo "Training TriPoseFusion with views: front,left,right"
-echo "Index mapping: ${index_mapping}/${index_file}"
+echo "Index mapping: ${index_mapping}"
 echo "SAM3D path: ${sam3d_results_path}"
 
 # === 运行 TriPoseFusion 训练脚本 ===
 python TriPoseFusion/main.py \
   paths.root_path="${root_path}" \
-  paths.index_mapping="${index_mapping}" \
-  paths.index_file="${index_file}" \
   paths.sam3d_results_path="${sam3d_results_path}" \
   data.num_workers="${num_workers}" \
   data.batch_size="${batch_size}" \
