@@ -14,7 +14,7 @@ paths:
 
 data:
   num_workers: 32
-  batch_size: 24
+  batch_size: 22
   uniform_temporal_subsample_num: 16
   magic_move: false # only used to choose index_magicmove.json when paths.index_file is empty
 
