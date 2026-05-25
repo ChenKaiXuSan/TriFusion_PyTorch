@@ -9,7 +9,7 @@ hydra:
 paths:
   root_path: /workspace/data/multi_view_driver_action
   index_mapping: ${paths.root_path}/index_mapping # folder or full path to prebuilt fold index json
-  index_file: index.json # used only when index_mapping is a folder
+  index_file: fold_${train.fold}.json # used only when index_mapping is a folder
   sam3d_results_path: /workspace/data/sam3d_body_results_right_full
 
 data:
@@ -64,6 +64,7 @@ train:
   max_epochs: 50
   devices: 1
   grad_clip_val: 1.0
+  fold: 0
   view: multi
   view_name: ['front', 'left', 'right']
 

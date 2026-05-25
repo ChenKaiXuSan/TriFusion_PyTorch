@@ -1,125 +1,91 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
-"""
-File: /workspace/skeleton/project/cross_validation.py
-Project: /workspace/skeleton/project
-Created Date: Friday March 22nd 2024
-Author: Kaixu Chen
------
-Comment:
-This module defines a cross-validation strategy based on GroupKFold,
-按照 person_id 进行分组划分，确保同一人的数据不会同时出现在训练集和验证集中。
-根据label文件夹中的标注文件，配对对应的视频文件，构建样本列表。
-划分结果会被保存到指定的index_mapping目录下的index.json文件中，以便后续加载使用。
-不实用person22，23的数据。
+"""Build TriPoseFusion cross-validation index files with plain argparse."""
 
-Have a good code time :)
------
-Last Modified: Thursday May 1st 2025 8:34:05 pm
-Modified By: the developer formerly known as Kaixu Chen at <chenkaixusan@gmail.com>
------
-Copyright (c) 2024 The University of Tsukuba
------
-HISTORY:
-Date      	By	Comments
-----------	---	---------------------------------------------------------
+from __future__ import annotations
 
-"""
-
+import argparse
 import json
-import random
+import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from sklearn.model_selection import GroupKFold
-from map_config import (
-    environment_mapping_Dict,
-    ENV_KEY_TO_FOLDER,
-    CAM_NAMES,
-    VideoSample,
-)
+
+try:
+    from map_config import CAM_NAMES, ENV_KEY_TO_FOLDER, VideoSample
+except ImportError:
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from TriPoseFusion.map_config import CAM_NAMES, ENV_KEY_TO_FOLDER, VideoSample
+
+
+def _first_existing_dir(candidates: List[Path]) -> Optional[Path]:
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
+def _infer_video_path(root_path: Path, video_path: Optional[Path]) -> Path:
+    if video_path is not None:
+        return video_path
+    found = _first_existing_dir([root_path / "videos_split", root_path / "videos"])
+    return found if found is not None else root_path / "videos_split"
+
+
+def _infer_annotation_path(root_path: Path, annotation_path: Optional[Path]) -> Path:
+    if annotation_path is not None:
+        return annotation_path
+    found = _first_existing_dir([root_path / "label", root_path / "labels", root_path / "annotation"])
+    return found if found is not None else root_path / "label"
 
 
 class DefineCrossValidation(object):
-    """
-    New behavior:
-      - build samples from:
-          videos/{person}/{env_folder}/{cam}.mp4
-          label/person_{person}_{day|night}_{high|low}_h265.json
-      - GroupKFold split by person_id
-      - no sampler
-    """
+    """Build samples from label/video/SAM3D paths and split them by person_id."""
 
-    def __init__(self, config) -> None:
-        self.video_path: Path = Path(
-            config.paths.video_path
-        )  # e.g. /workspace/data/videos
-        self.annotation_path: Path = Path(
-            config.paths.annotation_path
-        )  # e.g. /workspace/data/label
-        self.sam3d_results_path: Path = Path(
-            config.paths.sam3d_results_path
-        )  # e.g. /workspace/data/sam3d_body_results_right
-
-        self.fold_count: int = int(config.data.fold)
-        self.index_mapping: Path = Path(
-            config.paths.index_mapping
-        )  # folder to save/load index.json
-
-        # Magic move configuration
-        self.enable_magic_move: bool = bool(getattr(config.data, "magic_move", False))
-        self.magic_move_ratio: float = float(
-            getattr(config.data, "magic_move_ratio", 0.1)
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.root_path: Path = Path(args.root_path)
+        self.video_path: Path = _infer_video_path(self.root_path, args.video_path)
+        self.annotation_path: Path = _infer_annotation_path(
+            self.root_path, args.annotation_path
         )
-        self.magic_move_seed: int = int(getattr(config.data, "magic_move_seed", 0))
+        self.sam3d_results_path: Path = Path(args.sam3d_results_path)
+        self.index_mapping: Path = Path(args.index_mapping)
+        self.fold_file_template: str = str(args.fold_file_template)
 
-    # --------- helpers ---------
+        self.fold_count: int = int(args.folds)
+        self.overwrite: bool = bool(args.overwrite)
+
     @staticmethod
-    def _parse_label_filename(p: Path) -> Tuple[str, str, str]:
-        """
-        person_01_night_high_h265.json -> ("01", "night", "high")
-        """
-        stem = p.stem  # person_01_night_high_h265
-        parts = stem.split("_")
-        # 最少应满足：person, 01, night, high, h265
+    def _parse_label_filename(path: Path) -> Tuple[str, str, str]:
+        """person_01_night_high_h265.json -> ("01", "night", "high")."""
+        parts = path.stem.split("_")
         if len(parts) < 5 or parts[0] != "person":
-            raise ValueError(f"Unexpected label filename: {p.name}")
-        person_id = parts[1]
-        daynight = parts[2]
-        highlow = parts[3]
-        return person_id, daynight, highlow
+            raise ValueError(f"Unexpected label filename: {path.name}")
+        return parts[1], parts[2], parts[3]
 
     def _collect_one_sample(self, label_path: Path) -> VideoSample | None:
         person_id, daynight, highlow = self._parse_label_filename(label_path)
-
-        # label中的环境 -> 视频文件夹中文名
         if (daynight, highlow) not in ENV_KEY_TO_FOLDER:
-            # 不认识的命名就跳过
             return None
 
         env_folder = ENV_KEY_TO_FOLDER[(daynight, highlow)]
         env_key = f"{daynight}_{highlow}"
-
-        # video root: videos/01/夜多/
-        vid_dir = self.video_path / person_id / env_folder
-        if not vid_dir.exists():
-            # 你的数据可能是 videos/01/... 但 label 是 person_01...
-            # 如果视频路径是 01 而 person_id 是 "01" 这没问题；
-            # 如果是 "1" vs "01" 才会找不到，需要你统一命名
+        video_dir = self.video_path / person_id / env_folder
+        if not video_dir.exists():
             return None
 
         videos: Dict[str, Path] = {}
         for cam in CAM_NAMES:
-            mp4 = vid_dir / f"{cam}.mp4"
-            if mp4.exists():
-                videos[cam] = mp4
+            video_file = video_dir / f"{cam}.mp4"
+            if video_file.exists():
+                videos[cam] = video_file
 
-        # 至少要有一个视频才算 sample
-        if len(videos) == 0:
+        if not videos:
             return None
 
-        # * Collect SAM 3D body keypoints directory paths (optional)
-        # sam3d_results_path/person_id/env_folder/cam/
         sam3d_kpts: Dict[str, Path] = {}
         for cam in CAM_NAMES:
             kpt_dir = self.sam3d_results_path / person_id / env_folder / cam
@@ -132,182 +98,197 @@ class DefineCrossValidation(object):
             env_key=env_key,
             label_path=label_path,
             videos=videos,
-            sam3d_kpts=sam3d_kpts if len(sam3d_kpts) > 0 else None,
+            sam3d_kpts=sam3d_kpts if sam3d_kpts else None,
         )
 
     def build_samples(self) -> List[VideoSample]:
-        """
-        Scan label directory, pair videos, return samples list.
-        """
         label_files = sorted(self.annotation_path.glob("person_*_*.json"))
         samples: List[VideoSample] = []
-        for lp in label_files:
+
+        for label_path in label_files:
             try:
-                s = self._collect_one_sample(lp)
-            except Exception:
-                s = None
-            if s is not None:
-                samples.append(s)
+                sample = self._collect_one_sample(label_path)
+            except Exception as exc:
+                print(f"Skip invalid label {label_path}: {exc}")
+                sample = None
+
+            if sample is not None:
+                samples.append(sample)
+
         return samples
 
     def split_by_person(
         self, samples: List[VideoSample]
     ) -> Dict[int, Dict[str, List[VideoSample]]]:
-        """
-        GroupKFold by person_id
-        """
         if self.fold_count <= 1:
-            # fold=1 时，给一个“全量train + 空val”或你也可以改成 train_test_split
             return {0: {"train": samples, "val": []}}
 
-        groups = [s.person_id for s in samples]
-        indices = list(range(len(samples)))
-
-        gkf = GroupKFold(n_splits=self.fold_count)
-        fold_dict: Dict[int, Dict[str, List[VideoSample]]] = {}
-
-        for fold, (tr_idx, va_idx) in enumerate(gkf.split(indices, groups=groups)):
-            train_samples = [samples[i] for i in tr_idx]
-            val_samples = [samples[i] for i in va_idx]
-            fold_dict[fold] = {"train": train_samples, "val": val_samples}
-
-        return fold_dict
-
-    def magic_move(
-        self,
-        fold_samples: Dict[int, Dict[str, List[VideoSample]]],
-        ratio: float = 0.1,
-        seed: int = 0,
-    ) -> Dict[int, Dict[str, List[VideoSample]]]:
-        """
-        Move a portion of train samples into val for each fold.
-        """
-        if ratio <= 0:
-            return fold_samples
-
-        rng = random.Random(seed)
-        updated: Dict[int, Dict[str, List[VideoSample]]] = {}
-
-        for fold, splits in fold_samples.items():
-            train_samples = list(splits.get("train", []))
-            val_samples = list(splits.get("val", []))
-
-            if len(train_samples) == 0:
-                updated[fold] = {"train": train_samples, "val": val_samples}
-                continue
-
-            move_count = int(len(train_samples) * ratio)
-            if move_count <= 0 and len(train_samples) > 1:
-                move_count = 1
-
-            rng.shuffle(train_samples)
-            moved = train_samples[:move_count]
-            remaining = train_samples[move_count:]
-
-            updated[fold] = {
-                "train": remaining,
-                "val": val_samples + moved,
-            }
-
-        return updated
-
-    # --------- main entry ---------
-    def prepare(self):
-        samples = self.build_samples()
-        if len(samples) == 0:
-            raise RuntimeError(
-                f"No valid samples found. Please check:\n"
-                f"  video_path={self.video_path}\n"
-                f"  annotation_path={self.annotation_path}\n"
-                f"  label filename format: person_XX_(day|night)_(high|low)_h265.json\n"
-                f"  video structure: videos/XX/(夜多|夜少|昼多|昼少)/(front|right|left).mp4"
+        groups = [sample.person_id for sample in samples]
+        unique_groups = sorted(set(groups))
+        if self.fold_count > len(unique_groups):
+            raise ValueError(
+                f"folds={self.fold_count} is larger than person count "
+                f"({len(unique_groups)}). Please reduce --folds."
             )
 
-        fold_samples = self.split_by_person(samples)
+        indices = list(range(len(samples)))
+        group_kfold = GroupKFold(n_splits=self.fold_count)
+        fold_samples: Dict[int, Dict[str, List[VideoSample]]] = {}
+
+        for fold, (train_idx, val_idx) in enumerate(
+            group_kfold.split(indices, groups=groups)
+        ):
+            fold_samples[fold] = {
+                "train": [samples[i] for i in train_idx],
+                "val": [samples[i] for i in val_idx],
+            }
+
         return fold_samples
 
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
-        """
-        Save/load fold index json
-        """
-        target_dir = self.index_mapping
-        target_dir.mkdir(parents=True, exist_ok=True)
+    def prepare(self) -> Dict[int, Dict[str, List[VideoSample]]]:
+        samples = self.build_samples()
+        if not samples:
+            raise RuntimeError(
+                "No valid samples found. Please check:\n"
+                f"  video_path={self.video_path}\n"
+                f"  annotation_path={self.annotation_path}\n"
+                f"  sam3d_results_path={self.sam3d_results_path}\n"
+                "  label filename format: person_XX_(day|night)_(high|low)_h265.json\n"
+                "  video structure: videos/XX/(夜多い|夜少ない|昼多い|昼少ない)/(front|right|left).mp4"
+            )
 
-        # Use config values, with kwargs override
-        enable_magic_move = self.enable_magic_move
-        magic_move_ratio = self.magic_move_ratio
-        magic_move_seed = self.magic_move_seed
+        return self.split_by_person(samples)
 
-        index_name = "index_magicmove.json" if enable_magic_move else "index.json"
-        index_file = target_dir / index_name
+    @staticmethod
+    def _sample_to_json(sample: VideoSample) -> Dict[str, Any]:
+        return {
+            "person_id": sample.person_id,
+            "env_folder": sample.env_folder,
+            "env_key": sample.env_key,
+            "label_path": str(sample.label_path) if sample.label_path else None,
+            "videos": {key: str(value) for key, value in sample.videos.items()},
+            "sam3d_kpts": {
+                key: str(value) for key, value in sample.sam3d_kpts.items()
+            }
+            if sample.sam3d_kpts
+            else None,
+        }
 
-        if not index_file.exists():
-            fold_samples = self.prepare()
-            if enable_magic_move:
-                fold_samples = self.magic_move(
-                    fold_samples, ratio=magic_move_ratio, seed=magic_move_seed
+    @staticmethod
+    def _sample_from_json(item: Dict[str, Any]) -> VideoSample:
+        sam3d_kpts = item.get("sam3d_kpts")
+        label_path = item.get("label_path") or item.get("label")
+        return VideoSample(
+            person_id=str(item["person_id"]),
+            env_folder=str(item["env_folder"]),
+            env_key=str(item["env_key"]),
+            videos={key: Path(value) for key, value in item.get("videos", {}).items()},
+            label_path=Path(label_path) if label_path else None,
+            sam3d_kpts={key: Path(value) for key, value in sam3d_kpts.items()}
+            if sam3d_kpts
+            else None,
+        )
+
+    def _fold_file(self, fold: int) -> Path:
+        return self.index_mapping / self.fold_file_template.format(fold=fold)
+
+    def _existing_fold_files(self) -> List[Path]:
+        if "{fold}" in self.fold_file_template:
+            prefix, suffix = self.fold_file_template.split("{fold}", 1)
+            return sorted(self.index_mapping.glob(f"{prefix}*{suffix}"))
+        return sorted(self.index_mapping.glob(self.fold_file_template))
+
+    def _save_fold_files(
+        self, fold_samples: Dict[int, Dict[str, List[VideoSample]]]
+    ) -> None:
+        for fold, splits in fold_samples.items():
+            fold_file = self._fold_file(fold)
+            serial = {
+                "train": [self._sample_to_json(s) for s in splits["train"]],
+                "val": [self._sample_to_json(s) for s in splits["val"]],
+            }
+            with open(fold_file, "w", encoding="utf-8") as f:
+                json.dump(serial, f, ensure_ascii=False, indent=2)
+            print(f"Saved fold {fold}: {fold_file}")
+
+    def _load_fold_files(self) -> Dict[int, Dict[str, List[VideoSample]]]:
+        fold_samples: Dict[int, Dict[str, List[VideoSample]]] = {}
+        for fold in range(self.fold_count):
+            fold_file = self._fold_file(fold)
+            if not fold_file.exists():
+                raise FileNotFoundError(
+                    f"Fold index JSON not found: {fold_file}. "
+                    "Use --overwrite to regenerate fold files."
                 )
 
-            # serialize
-            serial: Dict[str, Any] = {}
-            for fold, d in fold_samples.items():
-                serial[str(fold)] = {
-                    "train": [
-                        {
-                            "person_id": s.person_id,
-                            "env_folder": s.env_folder,
-                            "env_key": s.env_key,
-                            "label_path": str(s.label_path),
-                            "videos": {k: str(v) for k, v in s.videos.items()},
-                            "sam3d_kpts": {k: str(v) for k, v in s.sam3d_kpts.items()}
-                            if s.sam3d_kpts
-                            else None,
-                        }
-                        for s in d["train"]
-                    ],
-                    "val": [
-                        {
-                            "person_id": s.person_id,
-                            "env_folder": s.env_folder,
-                            "env_key": s.env_key,
-                            "label_path": str(s.label_path),
-                            "videos": {k: str(v) for k, v in s.videos.items()},
-                            "sam3d_kpts": {k: str(v) for k, v in s.sam3d_kpts.items()}
-                            if s.sam3d_kpts
-                            else None,
-                        }
-                        for s in d["val"]
-                    ],
-                }
+            with open(fold_file, "r", encoding="utf-8") as f:
+                serial = json.load(f)
 
-            with open(index_file, "w", encoding="utf-8") as f:
-                json.dump(serial, f, ensure_ascii=False, indent=2)
-
-            return fold_samples
-
-        # load
-        with open(index_file, "r", encoding="utf-8") as f:
-            serial = json.load(f)
-
-        fold_samples: Dict[int, Dict[str, List[VideoSample]]] = {}
-        for kfold, d in serial.items():
-            fold = int(kfold)
             fold_samples[fold] = {"train": [], "val": []}
             for split in ["train", "val"]:
-                for item in d[split]:
-                    sam3d_kpts = (
-                        {kk: Path(vv) for kk, vv in item["sam3d_kpts"].items()}
-                        if item.get("sam3d_kpts")
-                        else None
-                    )
-                    fold_samples[fold][split].append(
-                        VideoSample(
-                            person_id=item["person_id"],
-                            env_folder=item["env_folder"],
-                            env_key=item["env_key"],
-                            videos={kk: Path(vv) for kk, vv in item["videos"].items()},
-                            sam3d_kpts=sam3d_kpts,
-                        )
-                    )
+                for item in serial.get(split, []):
+                    fold_samples[fold][split].append(self._sample_from_json(item))
 
+        print(f"Loaded {len(fold_samples)} fold index files from: {self.index_mapping}")
         return fold_samples
+
+    def __call__(self) -> Dict[int, Dict[str, List[VideoSample]]]:
+        self.index_mapping.mkdir(parents=True, exist_ok=True)
+        existing_fold_files = self._existing_fold_files()
+
+        if self.overwrite or len(existing_fold_files) < self.fold_count:
+            fold_samples = self.prepare()
+            self._save_fold_files(fold_samples)
+            return fold_samples
+
+        return self._load_fold_files()
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Generate or load TriPoseFusion GroupKFold index JSON."
+    )
+    parser.add_argument(
+        "--root-path",
+        type=Path,
+        default=Path("/workspace/data/multi_view_driver_action"),
+    )
+    parser.add_argument("--video-path", type=Path, default="/workspace/data/videos_split")
+    parser.add_argument("--annotation-path", type=Path, default="/workspace/data/multi_view_driver_action/label")
+    parser.add_argument(
+        "--sam3d-results-path",
+        type=Path,
+        default=Path("/workspace/data/sam3d_body_results_right"),
+    )
+    parser.add_argument(
+        "--index-mapping",
+        type=Path,
+        default=Path("/workspace/data/multi_view_driver_action/index_mapping"),
+    )
+    parser.add_argument("--fold-file-template", type=str, default="fold_{fold}.json")
+    parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--overwrite", action="store_true")
+    return parser
+
+
+def print_summary(args: argparse.Namespace, fold_samples: Dict[int, Dict[str, List[VideoSample]]]) -> None:
+    print("TriPoseFusion cross-validation")
+    print(f"  root_path={args.root_path}")
+    print(f"  video_path={_infer_video_path(args.root_path, args.video_path)}")
+    print(f"  annotation_path={_infer_annotation_path(args.root_path, args.annotation_path)}")
+    print(f"  sam3d_results_path={args.sam3d_results_path}")
+    print(f"  index_mapping={args.index_mapping}")
+    print(f"  fold_file_template={args.fold_file_template}")
+    print(f"  folds={args.folds}")
+    for fold, splits in fold_samples.items():
+        print(f"fold {fold}: train={len(splits['train'])}, val={len(splits['val'])}")
+
+
+def main() -> None:
+    args = build_arg_parser().parse_args()
+    fold_samples = DefineCrossValidation(args)()
+    print_summary(args, fold_samples)
+
+
+if __name__ == "__main__":
+    main()

@@ -27,29 +27,28 @@ from trainer.train_triple_fusion import GeoFusionPoseTrainer
 logger = logging.getLogger(__name__)
 
 
-def _resolve_index_json(config: DictConfig) -> Path:
-    """Return the prebuilt fold-index JSON path.
+def _selected_train_fold(config: DictConfig) -> int:
+    fold = getattr(config.train, "fold", None)
+    if fold is None:
+        raise ValueError("Missing train.fold in config. Set train.fold to an integer fold id.")
+    if str(fold).lower() == "all":
+        raise ValueError("train.fold must be a single integer when using per-fold JSON files.")
+    return int(fold)
 
-    `paths.index_mapping` may point either to a JSON file or to a folder. When it
-    is a folder, `paths.index_file` selects the file inside it.
-    """
+
+def _resolve_fold_index_json(config: DictConfig, fold: int) -> Path:
+    """Return the JSON file for the configured training fold."""
     index_mapping = Path(config.paths.index_mapping)
     if index_mapping.is_file():
         return index_mapping
 
-    index_name = str(getattr(config.paths, "index_file", ""))
-    if index_name:
-        index_file = index_mapping / index_name
-    else:
-        use_magic = bool(getattr(config.data, "magic_move", False))
-        index_file = index_mapping / (
-            "index_magicmove.json" if use_magic else "index.json"
-        )
+    index_name = str(getattr(config.paths, "index_file", "fold_{fold}.json") or "fold_{fold}.json")
+    index_file = index_mapping / index_name.format(fold=fold)
 
     if not index_file.exists():
         raise FileNotFoundError(
-            f"Index JSON not found: {index_file}. "
-            "Please generate it beforehand or set paths.index_file."
+            f"Fold index JSON not found: {index_file}. "
+            f"Please generate fold {fold} beforehand or set paths.index_file."
         )
     return index_file
 
@@ -72,20 +71,32 @@ def _sample_from_json(item: Dict[str, Any]) -> VideoSample:
 def load_fold_dataset_idx_from_json(
     config: DictConfig,
 ) -> Dict[int, Dict[str, list[VideoSample]]]:
-    index_file = _resolve_index_json(config)
-    logger.info("Loading fold dataset index from JSON: %s", index_file)
+    fold = _selected_train_fold(config)
+    index_file = _resolve_fold_index_json(config, fold)
+    logger.info("Loading fold %d dataset index from JSON: %s", fold, index_file)
 
     with open(index_file, "r", encoding="utf-8") as f:
         serial = json.load(f)
 
-    fold_dataset_idx: Dict[int, Dict[str, list[VideoSample]]] = {}
-    for fold_key, split_dict in serial.items():
-        fold = int(fold_key)
-        fold_dataset_idx[fold] = {
+    if "train" in serial or "val" in serial:
+        return {
+            fold: {
+                split: [_sample_from_json(item) for item in serial.get(split, [])]
+                for split in ("train", "val")
+            }
+        }
+
+    fold_key = str(fold)
+    if fold_key not in serial:
+        raise KeyError(f"Fold {fold} not found in aggregate index JSON: {index_file}")
+
+    split_dict = serial[fold_key]
+    return {
+        fold: {
             split: [_sample_from_json(item) for item in split_dict.get(split, [])]
             for split in ("train", "val")
         }
-    return fold_dataset_idx
+    }
 
 
 def build_module(hparams: DictConfig) -> GeoFusionPoseTrainer:
@@ -155,7 +166,7 @@ def init_params(config: DictConfig) -> None:
     fold_dataset_idx = load_fold_dataset_idx_from_json(config)
 
     logger.info("%s", "#" * 50)
-    logger.info("Start training all folds")
+    logger.info("Start training selected fold")
     logger.info("%s", "#" * 50)
 
     for fold, dataset_value in fold_dataset_idx.items():
@@ -170,7 +181,7 @@ def init_params(config: DictConfig) -> None:
         logger.info("%s", "#" * 50)
 
     logger.info("%s", "#" * 50)
-    logger.info("Finished training all folds")
+    logger.info("Finished training selected fold")
     logger.info("%s", "#" * 50)
 
 
