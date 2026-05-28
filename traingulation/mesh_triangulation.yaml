@@ -1,0 +1,103 @@
+# hydra config
+hydra:
+  run:
+    dir: ${paths.log_path}
+  job:
+    chdir: false
+
+# 相机内参，这个是从视频里面测试得到的
+camera_K:
+  front:
+    [
+      1664.0604735097929,
+      0.0,
+      1143.4887067045468,
+      0.0,
+      1664.7769983404794,
+      713.19173189428841,
+      0.0,
+      0.0,
+      1.0,
+    ]
+  right:
+    [
+      1779.1379512181984,
+      0.0,
+      1137.8486393648627,
+      0.0,
+      1732.1708081188367,
+      581.06501382047725,
+      0.0,
+      0.0,
+      1.0,
+    ]
+  left:
+    [
+      1699.8282197018814,
+      0.0,
+      1122.4488901239677,
+      0.0,
+      1669.0202273077914,
+      697.80793123023841,
+      0.0,
+      0.0,
+      1.0,
+    ]
+  image_size: [1080, 1920] # (width, height)
+
+paths:
+  log_path: logs/triangulated/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  mesh_path: /workspace/data/mesh
+  video_path: /workspace/data/videos_split
+  # SAM3D body 2D keypoints: <root>/<person>/<env>/<front|left|right>/*_sam3d_body.npz
+  sam3d_kpt_path: /workspace/data/sam3d_body_results_right
+  # Triangulated 3D keypoint GT output root.
+  triangulated_kpt_path: /workspace/data/sam3d_body_triangulated_gt
+
+camera_position:
+  # 相机布局
+  T: [0.0, 0.0, 1.5] # 人体目标点位置 (x, y, z)
+  z: 1.5 # 相机高度（m）
+  # * 按照front为0°，逆时针为+的约定
+  # * 相机到目标的距离(cm)
+  dist_front: 0.62
+  dist_left: 0.85
+  dist_right: 0.85
+  baseline: 0.70 # left–right 的水平间距 (m)
+
+triangulation:
+  # SAM3D pred_keypoints_2d are in the original projection coordinate system,
+  # not in the saved 224x332 debug-frame coordinate system.
+  keypoint_image_size: null # set [width, height] only if you want boundary filtering
+  resize_intrinsics: false
+  intrinsics_image_size: [2304, 1296] # used only when resize_intrinsics=true
+  resize_mode: letterbox
+  valid_margin_px: 8.0
+  # Rough camera layout is approximate, so keep this consistent with mesh triangulation.
+  max_reproj_error_px: 800.0
+
+
+COCO_SKELETON:
+  - (0, 1),
+  - (0, 2),
+  - (1, 3),
+  - (2, 4),
+  - (5, 7),
+  - (7, 9),
+  - (6, 8),
+  - (8, 10),
+  - (5, 6),
+  - (5, 11),
+  - (6, 12),
+  - (11, 12),
+  - (11, 13),
+  - (13, 15),
+  - (12, 14),
+  - (14, 16),
+
+debug: false
+
+vis:
+  save_mesh_frame: true
+  save_mesh_3d: true
+  merge_3d_frames_to_video: true
