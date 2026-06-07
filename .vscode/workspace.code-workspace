@@ -2,11 +2,11 @@
 	"folders": [
 		{
 			"name": "code",
-			"path": "/workspace/MultiView_DriverAction_PyTorch"
+			"path": "/home/workspace/kaixu/code/MultiView_DriverAction_PyTorch"
 		},
 		{
 			"name": "data",
-			"path": "/workspace/data"
+			"path": "/home/data/xchen/drive"
 		},
 	],
 	"settings": {

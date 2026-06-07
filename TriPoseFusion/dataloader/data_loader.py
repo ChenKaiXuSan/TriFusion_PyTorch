@@ -8,7 +8,7 @@ import torch
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
-from .kpt_dataset import whole_video_dataset
+from .kpt_dataset import KPTDataset
 
 
 class DriverKPTDataModule(LightningDataModule):
@@ -30,21 +30,21 @@ class DriverKPTDataModule(LightningDataModule):
         return None
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.train_gait_dataset = whole_video_dataset(
+        self.train_gait_dataset = KPTDataset(
             experiment=self.experiment,
-            dataset_idx=self.dataset_idx["train"],
+            index_mapping=self.dataset_idx["train"],
             view_name=self.view_name,
             target_t=self.target_t,
         )
-        self.val_gait_dataset = whole_video_dataset(
+        self.val_gait_dataset = KPTDataset(
             experiment=self.experiment,
-            dataset_idx=self.dataset_idx["val"],
+            index_mapping=self.dataset_idx["val"],
             view_name=self.view_name,
             target_t=self.target_t,
         )
-        self.test_gait_dataset = whole_video_dataset(
+        self.test_gait_dataset = KPTDataset(
             experiment=self.experiment,
-            dataset_idx=self.dataset_idx["val"],
+            index_mapping=self.dataset_idx["val"],
             view_name=self.view_name,
             target_t=self.target_t,
         )

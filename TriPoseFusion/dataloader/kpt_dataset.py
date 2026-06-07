@@ -263,20 +263,3 @@ class KPTDataset(Dataset):
                 else None,
             },
         }
-
-
-def whole_video_dataset(
-    experiment: str,
-    dataset_idx: List[VideoSample],
-    transform: Any = None,
-    view_name: Optional[List[str]] = None,
-    target_t: Optional[int] = None,
-) -> KPTDataset:
-    """Factory for SAM3D keypoint dataset."""
-    return KPTDataset(
-        experiment=experiment,
-        index_mapping=dataset_idx,
-        transform=transform,
-        view_name=view_name,
-        target_t=target_t,
-    )
