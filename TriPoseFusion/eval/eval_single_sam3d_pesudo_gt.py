@@ -637,10 +637,61 @@ def save_results_by_subject_env(
     output_dir: Path,
 ):
     """按 person/env 组织保存结果，同时保留一份全局汇总。"""
+    def _mm_to_m(value: Any) -> Any:
+        if not isinstance(value, (int, float)):
+            return value
+        return float(value) / 1000.0
+
+    def _pck_keys_to_decimal(pck_dict: Dict[str, Any]) -> Dict[str, float]:
+        out: Dict[str, float] = {}
+        for k, v in pck_dict.items():
+            try:
+                key_m = f"{float(k) / 1000.0:.2f}"
+                out[key_m] = float(v)
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    def _convert_camera_payload(cameras: Dict[str, Any]) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for cam_name, cam_stats in cameras.items():
+            cam_metrics = dict(cam_stats.get('metrics', {}))
+            cam_pck = _pck_keys_to_decimal(cam_metrics.get('pck', {}))
+            out[cam_name] = {
+                'num_frames': cam_stats.get('num_frames'),
+                'num_keypoints': cam_stats.get('num_keypoints'),
+                'mean_sam3d_confidence': cam_stats.get('mean_sam3d_confidence'),
+                'valid_ratio': cam_stats.get('valid_ratio'),
+                'metrics': {
+                    'num_frames': cam_metrics.get('num_frames'),
+                    'num_keypoints': cam_metrics.get('num_keypoints'),
+                    'num_valid_points': cam_metrics.get('num_valid_points'),
+                    'mpjpe_m': _mm_to_m(cam_metrics.get('mpjpe_mm')),
+                    'median_error_m': _mm_to_m(cam_metrics.get('median_error_mm')),
+                    'root_mpjpe_m': _mm_to_m(cam_metrics.get('root_mpjpe_mm')),
+                    'pa_mpjpe_m': _mm_to_m(cam_metrics.get('pa_mpjpe_mm')),
+                    'pck': cam_pck,
+                    'auc_0.15': cam_metrics.get('auc_150'),
+                    'per_axis_mae_m': {
+                        'x': _mm_to_m(cam_metrics.get('per_axis_mae_mm', {}).get('x')),
+                        'y': _mm_to_m(cam_metrics.get('per_axis_mae_mm', {}).get('y')),
+                        'z': _mm_to_m(cam_metrics.get('per_axis_mae_mm', {}).get('z')),
+                    },
+                    'per_joint_mpjpe_m': [
+                        _mm_to_m(v) for v in cam_metrics.get('per_joint_mpjpe_mm', [])
+                    ],
+                },
+                'frame_ids': cam_stats.get('frame_ids', []),
+            }
+        return out
+
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    subjects_out: List[Dict[str, Any]] = []
 
     for subject in all_subjects:
         subject_id = subject['person_id']
+        subject_out = {'person_id': subject_id, 'environments': {}}
         for env_name, env_stats in subject.get('environments', {}).items():
             if env_stats.get('total_frames', 0) == 0:
                 continue
@@ -657,33 +708,37 @@ def save_results_by_subject_env(
                 'mean_valid_ratio': env_stats.get('mean_valid_ratio'),
                 'valid_ratio_range': env_stats.get('valid_ratio_range'),
                 'metrics': {
-                    'mpjpe_mm': env_stats.get('mpjpe_mm'),
-                    'median_error_mm': env_stats.get('median_error_mm'),
-                    'root_mpjpe_mm': env_stats.get('root_mpjpe_mm'),
-                    'pa_mpjpe_mm': env_stats.get('pa_mpjpe_mm'),
-                    'pck': env_stats.get('pck', {}),
-                    'auc_150': env_stats.get('auc_150'),
+                    'mpjpe_m': _mm_to_m(env_stats.get('mpjpe_mm')),
+                    'median_error_m': _mm_to_m(env_stats.get('median_error_mm')),
+                    'root_mpjpe_m': _mm_to_m(env_stats.get('root_mpjpe_mm')),
+                    'pa_mpjpe_m': _mm_to_m(env_stats.get('pa_mpjpe_mm')),
+                    'pck': _pck_keys_to_decimal(env_stats.get('pck', {})),
+                    'auc_0.15': env_stats.get('auc_150'),
                 },
-                'cameras': env_stats.get('cameras', {}),
+                'cameras': _convert_camera_payload(env_stats.get('cameras', {})),
             }
 
             with open(env_dir / 'metrics.json', 'w') as f:
                 json.dump(env_payload, f, indent=2)
 
+            subject_out['environments'][env_name] = env_payload
+
+        subjects_out.append(subject_out)
+
     with open(output_dir / 'comparison_data.json', 'w') as f:
         json.dump({
-            'subjects': all_subjects,
+            'subjects': subjects_out,
             'summary': {
                 k: {
                     'subjects': v['subjects'],
-                    'avg_mpjpe_mm': float(v.get('avg_mpjpe_mm', 0)),
-                    'avg_median_error_mm': float(v.get('avg_median_error_mm', 0)),
-                    'avg_root_mpjpe_mm': float(v.get('avg_root_mpjpe_mm', 0)),
-                    'avg_pa_mpjpe_mm': float(v.get('avg_pa_mpjpe_mm', 0)),
-                    'avg_pck_50': float(v.get('avg_pck_50', 0)),
-                    'avg_pck_100': float(v.get('avg_pck_100', 0)),
-                    'avg_pck_150': float(v.get('avg_pck_150', 0)),
-                    'avg_auc_150': float(v.get('avg_auc_150', 0)),
+                    'avg_mpjpe_m': _mm_to_m(v.get('avg_mpjpe_mm', 0)),
+                    'avg_median_error_m': _mm_to_m(v.get('avg_median_error_mm', 0)),
+                    'avg_root_mpjpe_m': _mm_to_m(v.get('avg_root_mpjpe_mm', 0)),
+                    'avg_pa_mpjpe_m': _mm_to_m(v.get('avg_pa_mpjpe_mm', 0)),
+                    'avg_pck_0.05': float(v.get('avg_pck_50', 0)),
+                    'avg_pck_0.10': float(v.get('avg_pck_100', 0)),
+                    'avg_pck_0.15': float(v.get('avg_pck_150', 0)),
+                    'avg_auc_0.15': float(v.get('avg_auc_150', 0)),
                 }
                 for k, v in summary['environment_summary'].items()
             }

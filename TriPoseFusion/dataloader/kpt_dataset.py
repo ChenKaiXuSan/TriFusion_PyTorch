@@ -75,6 +75,41 @@ class KPTDataset(Dataset):
             self._file_list_cache[cache_key] = sorted(kpt_dir.glob("*_sam3d_body.npz"))
         return self._file_list_cache[cache_key]
 
+    @staticmethod
+    def _extract_frame_id(path: Path) -> str:
+        stem = path.stem
+        suffix = "_sam3d_body"
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+        return stem
+
+    def _real_frame_interval_for_view(
+        self,
+        kpt_dir: Path,
+        start_frame: int,
+        end_frame: Optional[int],
+    ) -> Dict[str, Any]:
+        npz_files = self._sorted_npz_files(kpt_dir)
+        start_idx = max(0, int(start_frame))
+        end_idx = len(npz_files) if end_frame is None else min(len(npz_files), int(end_frame))
+        if end_idx <= start_idx or len(npz_files) == 0:
+            return {
+                "start_idx": start_idx,
+                "end_idx": end_idx,
+                "start_frame_id": None,
+                "end_frame_id": None,
+                "num_frames": 0,
+            }
+
+        selected = npz_files[start_idx:end_idx]
+        return {
+            "start_idx": start_idx,
+            "end_idx": end_idx,
+            "start_frame_id": self._extract_frame_id(selected[0]),
+            "end_frame_id": self._extract_frame_id(selected[-1]),
+            "num_frames": len(selected),
+        }
+
     def _count_frames_for_view(self, kpt_dir: Path) -> int:
         if not kpt_dir.exists():
             return 0
@@ -251,8 +286,14 @@ class KPTDataset(Dataset):
 
         sam3d_kpt_2d: Dict[str, torch.Tensor] = {}
         sam3d_kpt_3d: Dict[str, torch.Tensor] = {}
+        sam3d_real_frame_interval: Dict[str, Dict[str, Any]] = {}
 
         for view in self.view_name:
+            sam3d_real_frame_interval[view] = self._real_frame_interval_for_view(
+                item.sam3d_kpts[view],
+                start_frame,
+                end_frame,
+            )
             payload = self._load_one_view_kpts(item.sam3d_kpts[view], start_frame, end_frame)
             sam3d_kpt_2d[view] = self._uniform_temporal_sample(payload["kpt_2d"], self.target_t)
             sam3d_kpt_3d[view] = self._uniform_temporal_sample(payload["kpt_3d"], self.target_t)
@@ -268,6 +309,7 @@ class KPTDataset(Dataset):
                 "env_key": item.env_key,
                 "start_frame": start_frame,
                 "end_frame": end_frame,
+                "sam3d_real_frame_interval": sam3d_real_frame_interval,
                 "is_chunked": self.chunk_frames is not None,
                 "chunk_info": {
                     "chunk_idx": chunk_info["chunk_idx"],

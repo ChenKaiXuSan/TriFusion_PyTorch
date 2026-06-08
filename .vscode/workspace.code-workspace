@@ -27,6 +27,10 @@
 			"/^/home/workspace/kaixu/miniconda3/envs/drivefusion/bin/python -m py_compile TriPoseFusion/eval\\.py$/": {
 				"approve": true,
 				"matchCommandLine": true
+			},
+			"/^/home/workspace/kaixu/miniconda3/envs/drivefusion/bin/python -m py_compile TriPoseFusion/eval/eval_trifusion_pesudo_gt\\.py$/": {
+				"approve": true,
+				"matchCommandLine": true
 			}
 		}
 	}
