@@ -132,7 +132,9 @@ def _selected_source_frame_ids(
     view_dir = Path(sample.sam3d_kpts[source_view])
     files = sorted(view_dir.glob("*_sam3d_body.npz"))
     safe_start = max(0, int(start_frame))
-    safe_end = len(files) if end_frame is None else min(len(files), max(0, int(end_frame)))
+    safe_end = (
+        len(files) if end_frame is None else min(len(files), max(0, int(end_frame)))
+    )
     seg_files = files[safe_start:safe_end]
     if len(seg_files) <= 0:
         raise ValueError(
@@ -149,9 +151,14 @@ def _select_gt_by_frame_ids(
     source_frame_ids: List[str],
 ) -> tuple[np.ndarray, np.ndarray]:
     if tri_seq.frame_ids is None:
-        raise ValueError("GT has no frame_ids; cannot enforce strict same-time alignment.")
+        raise ValueError(
+            "GT has no frame_ids; cannot enforce strict same-time alignment."
+        )
 
-    gt_map = {_normalize_frame_id(fid): idx for idx, fid in enumerate(tri_seq.frame_ids.tolist())}
+    gt_map = {
+        _normalize_frame_id(fid): idx
+        for idx, fid in enumerate(tri_seq.frame_ids.tolist())
+    }
     missing = [fid for fid in source_frame_ids if fid not in gt_map]
     if missing:
         preview = ", ".join(missing[:5])
@@ -280,6 +287,19 @@ def _merge_metric_lists(per_item_metrics: list[Dict[str, float]]) -> Dict[str, f
     return out
 
 
+def _merge_named_float_maps(per_item_maps: list[Dict[str, float]]) -> Dict[str, float]:
+    buckets: Dict[str, list[float]] = defaultdict(list)
+    for item in per_item_maps:
+        for key, value in item.items():
+            if isinstance(value, float) and not math.isnan(value):
+                buckets[key].append(value)
+
+    out: Dict[str, float] = {}
+    for key, values in buckets.items():
+        out[key] = float(sum(values) / len(values))
+    return out
+
+
 def _aggregate_fold_metrics(
     per_fold: Dict[str, Dict[str, float]],
 ) -> Dict[str, Dict[str, float]]:
@@ -334,17 +354,24 @@ def _save_results(
 def _aggregate_person_env_metrics(
     item_records: List[Dict[str, Any]],
 ) -> Dict[str, Dict[str, Any]]:
-    grouped: Dict[tuple[str, str], List[Dict[str, float]]] = defaultdict(list)
+    grouped_metrics: Dict[tuple[str, str], List[Dict[str, float]]] = defaultdict(list)
+    grouped_weights: Dict[tuple[str, str], List[Dict[str, float]]] = defaultdict(list)
     for record in item_records:
-        grouped[(record["person_id"], record["env_folder"])].append(record["metrics"])
+        key = (record["person_id"], record["env_folder"])
+        grouped_metrics[key].append(record["metrics"])
+        if record.get("view_weights"):
+            grouped_weights[key].append(record["view_weights"])
 
     out: Dict[str, Dict[str, Any]] = {}
-    for (person_id, env_folder), metrics_list in grouped.items():
+    for (person_id, env_folder), metrics_list in grouped_metrics.items():
         merged = _merge_metric_lists(metrics_list)
         out[f"{person_id}/{env_folder}"] = {
             "person_id": person_id,
             "env_folder": env_folder,
             "metrics": merged,
+            "view_weights": _merge_named_float_maps(
+                grouped_weights.get((person_id, env_folder), [])
+            ),
         }
     return out
 
@@ -445,13 +472,18 @@ def _build_comparison_summary(
                     bucket[name].append(float(value))
 
             pck = metrics.get("pck", {})
-            for pck_key, bucket_key in (("0.05", "pck_0.05"), ("0.10", "pck_0.10"), ("0.15", "pck_0.15")):
+            for pck_key, bucket_key in (
+                ("0.05", "pck_0.05"),
+                ("0.10", "pck_0.10"),
+                ("0.15", "pck_0.15"),
+            ):
                 pck_val = pck.get(pck_key)
                 if isinstance(pck_val, (int, float)):
                     bucket[bucket_key].append(float(pck_val))
 
     summary: Dict[str, Dict[str, Any]] = {}
     for env_name, bucket in env_buckets.items():
+
         def _avg(values: List[float]) -> float:
             return float(sum(values) / len(values)) if values else 0.0
 
@@ -482,6 +514,7 @@ def _save_comparison_style_results(
         person_id = str(entry.get("person_id", ""))
         env_folder = str(entry.get("env_folder", ""))
         metrics = entry.get("metrics", {})
+        view_weights = entry.get("view_weights", {})
         env_name = ENV_NAMES.get(env_folder, env_folder)
 
         num_items = int(round(float(metrics.get("num_items", 0.0))))
@@ -494,6 +527,7 @@ def _save_comparison_style_results(
             "mean_sam3d_confidence": None,
             "mean_valid_ratio": None,
             "valid_ratio_range": None,
+            "view_weights": view_weights,
             "metrics": {
                 "mpjpe_m": _to_m(metrics.get("mpjpe")),
                 "median_error_m": None,
@@ -509,7 +543,9 @@ def _save_comparison_style_results(
                     "mean_sam3d_confidence": None,
                     "valid_ratio": None,
                     "metrics": {
-                        "num_valid_points": int(round(float(metrics.get("valid_joints", 0.0)))),
+                        "num_valid_points": int(
+                            round(float(metrics.get("valid_joints", 0.0)))
+                        ),
                         "mpjpe_m": _to_m(metrics.get("mpjpe")),
                         "median_error_m": None,
                         "root_mpjpe_m": None,
@@ -527,13 +563,20 @@ def _save_comparison_style_results(
         with open(env_dir / "metrics.json", "w", encoding="utf-8") as f:
             json.dump(env_payload, f, indent=2, ensure_ascii=False)
 
-        subject = subjects_map.setdefault(person_id, {"person_id": person_id, "environments": {}})
+        subject = subjects_map.setdefault(
+            person_id, {"person_id": person_id, "environments": {}}
+        )
         subject["environments"][env_folder] = env_payload
 
     all_subjects = [subjects_map[k] for k in sorted(subjects_map.keys())]
     summary = _build_comparison_summary(all_subjects)
     with open(output_dir / "comparison_data.json", "w", encoding="utf-8") as f:
-        json.dump({"subjects": all_subjects, "summary": summary}, f, indent=2, ensure_ascii=False)
+        json.dump(
+            {"subjects": all_subjects, "summary": summary},
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
 
     logger.info("Saved comparison-style outputs: %s", output_dir)
 
@@ -637,7 +680,9 @@ def _evaluate_fold(
                 try:
                     sample = sample_lookup.get(cache_key)
                     if sample is None:
-                        raise ValueError(f"No sample path mapping for {person_id}/{env_folder}")
+                        raise ValueError(
+                            f"No sample path mapping for {person_id}/{env_folder}"
+                        )
 
                     source_frame_ids = _selected_source_frame_ids(
                         sample=sample,
@@ -681,14 +726,21 @@ def _evaluate_fold(
                 )
                 if sample_metrics:
                     item_metrics.append(sample_metrics)
+                    alpha_mean = out["alpha"][sample_idx].mean(dim=(0, 1))
                     item_records.append(
                         {
                             "person_id": person_id,
                             "env_folder": env_folder,
                             "metrics": sample_metrics,
+                            "view_weights": {
+                                str(name): float(alpha_mean[idx].item())
+                                for idx, name in enumerate(module.model.view_names)
+                            },
                         }
                     )
-            progress.set_postfix(items=len(item_metrics), skipped=skipped_samples, batch=batch_idx + 1)
+            progress.set_postfix(
+                items=len(item_metrics), skipped=skipped_samples, batch=batch_idx + 1
+            )
 
     progress.close()
 
@@ -696,7 +748,9 @@ def _evaluate_fold(
     fold_metrics["skipped_samples"] = float(skipped_samples)
 
     person_env_results = _aggregate_person_env_metrics(item_records)
-    _save_person_env_results(output_dir=output_dir, fold=fold, person_env_results=person_env_results)
+    _save_person_env_results(
+        output_dir=output_dir, fold=fold, person_env_results=person_env_results
+    )
 
     logger.info("Fold %d metrics: %s", fold, fold_metrics)
     return fold_metrics, person_env_results
@@ -707,7 +761,6 @@ def main(config: DictConfig) -> None:
     seed_everything(42, workers=True)
     torch.set_float32_matmul_precision("high")
 
-    split = str(_cfg_get(config, "eval.split", "val")).lower()
     output_dir = Path(
         str(_cfg_get(config, "eval.output_dir", Path(config.log_path) / "eval"))
     )
@@ -730,7 +783,7 @@ def main(config: DictConfig) -> None:
     pck_thresholds_raw = _cfg_get(config, "eval.pck_thresholds", [0.02, 0.05, 0.1])
     pck_thresholds = [float(x) for x in pck_thresholds_raw]
 
-    config.eval.ckpt_path = "/home/workspace/kaixu/code/MultiView_DriverAction_PyTorch/logs/train/trifusionpose_['front', 'left', 'right']_16f/2026-06-07/18-33-58/checkpoints/fold_0/21-0.95.ckpt"
+    config.eval.ckpt_path = "/home/workspace/kaixu/code/MultiView_DriverAction_PyTorch/logs/train/trifusionpose_['front', 'left', 'right']_16f/2026-06-07/18-33-58/checkpoints/fold_0/last.ckpt"
     ckpt = _resolve_ckpt(config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Running triangulated evaluation on device: %s", device)
@@ -745,27 +798,33 @@ def main(config: DictConfig) -> None:
     for fold in _selected_folds(config, fold_dataset_idx.keys()):
         if fold not in fold_dataset_idx:
             raise KeyError(f"Fold {fold} is not in dataset index JSON.")
-        fold_metrics, fold_person_env_results = _evaluate_fold(
-            config=config,
-            fold=fold,
-            fold_dataset=fold_dataset_idx[fold],
-            module=module,
-            device=device,
-            split=split,
-            gt_root=gt_root,
-            pck_thresholds=pck_thresholds,
-            output_dir=output_dir,
-        )
-        per_fold[str(fold)] = fold_metrics
-        for person_env_key, entry in fold_person_env_results.items():
-            if person_env_key in merged_person_env_results:
-                existing_metrics = merged_person_env_results[person_env_key].get("metrics", {})
-                new_metrics = entry.get("metrics", {})
-                merged_person_env_results[person_env_key]["metrics"] = _merge_metric_lists(
-                    [existing_metrics, new_metrics]
-                )
-            else:
-                merged_person_env_results[person_env_key] = entry
+        for flag in ["train", "val"]:
+            if flag not in fold_dataset_idx[fold]:
+                raise KeyError(f"Flag {flag} is not in fold {fold} dataset index.")
+            logger.info("Evaluating fold %d split %s", fold, flag)
+            fold_metrics, fold_person_env_results = _evaluate_fold(
+                config=config,
+                fold=fold,
+                fold_dataset=fold_dataset_idx[fold],
+                module=module,
+                device=device,
+                split=flag,
+                gt_root=gt_root,
+                pck_thresholds=pck_thresholds,
+                output_dir=output_dir,
+            )
+            per_fold[str(fold)] = fold_metrics
+            for person_env_key, entry in fold_person_env_results.items():
+                if person_env_key in merged_person_env_results:
+                    existing_metrics = merged_person_env_results[person_env_key].get(
+                        "metrics", {}
+                    )
+                    new_metrics = entry.get("metrics", {})
+                    merged_person_env_results[person_env_key]["metrics"] = (
+                        _merge_metric_lists([existing_metrics, new_metrics])
+                    )
+                else:
+                    merged_person_env_results[person_env_key] = entry
 
     aggregate = _aggregate_fold_metrics(per_fold)
     _save_results(output_dir, per_fold, aggregate)
