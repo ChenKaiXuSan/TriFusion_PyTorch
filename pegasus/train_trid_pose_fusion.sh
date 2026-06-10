@@ -13,7 +13,17 @@ cd "${PROJECT_DIR}"
 mkdir -p ${PROJECT_DIR}/logs/pegasus/
 
 # === 加载 Python + 激活 Conda 环境 ===
+# Pegasus may preload Intel Python/oneAPI. Its xgboost deactivate hook can
+# reference unset variables, so disable nounset only while conda switches envs.
+case "$-" in
+  *u*) had_nounset=1 ;;
+  *) had_nounset=0 ;;
+esac
+set +u
 source activate /home/SKIING/chenkaixu/miniconda3/envs/direction
+if [ "${had_nounset}" -eq 1 ]; then
+  set -u
+fi
 conda env list
 
 # === 打印运行环境，方便排查超算日志 ===

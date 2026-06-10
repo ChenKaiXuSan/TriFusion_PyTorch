@@ -83,7 +83,7 @@ model:
   # Transform poses to body-centered coordinate system for position invariance
   geofusion_canonicalize: true      # Enable canonicalization
   geofusion_eps: 0.000001           # Epsilon for numerical stability
-  geofusion_use_robust_canon: false # Use outlier-aware canonicalization (experimental)
+  geofusion_use_robust_canonicalization: false # Use outlier-aware canonicalization (experimental)
 
   # === NCE CONTRASTIVE LEARNING ===
   # For contrastive loss between views in latent space

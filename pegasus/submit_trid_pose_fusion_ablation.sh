@@ -23,6 +23,8 @@ set -euo pipefail
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+mkdir -p "${PROJECT_DIR}/logs/pegasus"
 
 # === 独立实验脚本列表 ===
 # base_simple:

@@ -75,7 +75,12 @@ cd "${PROJECT_DIR}"
 mkdir -p "${PROJECT_DIR}/logs/pegasus"
 
 # === 加载 Python + Conda 环境 ===
+# Pegasus preloads Intel Python/oneAPI on some nodes. Its xgboost deactivate hook
+# reads OCL_ICD_FILENAMES_RESET without guarding for nounset, so relax -u only
+# while conda switches environments and restore strict mode immediately after.
+set +u
 source activate /home/SKIING/chenkaixu/miniconda3/envs/direction
+set -u
 
 # === 打印环境信息，便于从 Pegasus 日志排查问题 ===
 echo "============================================================"
@@ -113,8 +118,7 @@ fold=${FOLD:-0}
 experiment_name=${EXPERIMENT_NAME:-full}
 
 # === 根据 EXPERIMENT_NAME 选择消融开关 ===
-# 注意：配置里必须使用 geofusion_use_robust_canonicalization。
-# train.yaml 中旧名字 geofusion_use_robust_canon 与当前模型读取名不一致。
+# 注意：模型读取的配置名是 geofusion_use_robust_canonicalization。
 case "${experiment_name}" in
   base_simple)
     use_dilated_refiner=false
