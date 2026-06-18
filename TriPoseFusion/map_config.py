@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 """
-File: /workspace/MultiView_DriverAction_PyTorch/project/map_config.py
-Project: /workspace/MultiView_DriverAction_PyTorch/project
+File: /workspace/MultiView_DriverAction_PyTorch/TriPoseFusion/map_config.py
+Project: /workspace/MultiView_DriverAction_PyTorch/TriPoseFusion
 Created Date: Sunday January 25th 2026
 Author: Kaixu Chen
 -----

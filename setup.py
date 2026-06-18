@@ -10,8 +10,6 @@ from setuptools import setup, find_packages
 
 PATH_ROOT = os.path.dirname(__file__)
 
-import project  # noqa: E402
-
 
 def load_requirements(path_dir=PATH_ROOT, comment_char='#'):
     with open(os.path.join(path_dir, 'requirements.txt'), 'r') as file:
@@ -27,19 +25,16 @@ def load_requirements(path_dir=PATH_ROOT, comment_char='#'):
 # the goal of the project is simplicity for researchers, don't want to add too much
 # engineer specific practices
 setup(
-    # TODO: edit your project name, this name appears in PyPI
-    name='project',
-    version=project.__version__,
-    description=project.__docs__,
-    author=project.__author__,
-    author_email=project.__author_email__,
-    url=project.__homepage__,
-    # TODO: update optional download seed
-    download_url='https://github.com/PyTorchLightning/pytorch-lightning-conference-seed',
-    license=project.__license__,
+    name='TriPoseFusion',
+    version='0.1.0',
+    description='Tri-view 3D pose fusion for multi-view driver action analysis.',
+    author='Kaixu Chen',
+    author_email='chenkaixusan@gmail.com',
+    url='https://github.com/kaixu/MultiView_DriverAction_PyTorch',
+    license='MIT',
     packages=find_packages(exclude=['tests', 'docs']),
 
-    long_description=project.__long_doc__,
+    long_description=open(os.path.join(PATH_ROOT, 'README.md'), encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     include_package_data=True,
     zip_safe=False,

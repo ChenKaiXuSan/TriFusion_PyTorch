@@ -20,17 +20,17 @@
 
 ```bash
 # 默认训练命令
-python project/main.py --config-name train
+python TriPoseFusion/train.py --config-name train
 
 # 修改参数
-python project/main.py model.geofusion_refiner_layers=3 train.max_epochs=30
+python TriPoseFusion/train.py model.geofusion_refiner_layers=3 train.max_epochs=30
 ```
 
 ### 使用最小化配置 (快速测试)
 
 ```bash
 # 快速验证训练流程
-python project/main.py --config-name train_minimal
+python TriPoseFusion/train.py --config-name train_minimal
 ```
 
 ---
@@ -61,10 +61,10 @@ python project/main.py --config-name train_minimal
 
 ```bash
 # 标准配置下修改单一参数
-python project/main.py model.geofusion_refiner_layers=2
+python TriPoseFusion/train.py model.geofusion_refiner_layers=2
 
 # 同时修改多个参数
-python project/main.py \
+python TriPoseFusion/train.py \
     model.geofusion_hidden_dim=64 \
     data.batch_size=16 \
     train.max_epochs=10
@@ -84,7 +84,7 @@ cp configs/train_template.yaml configs/train_custom.yaml
 vi configs/train_custom.yaml
 
 # 使用自定义配置
-python project/main.py --config-name train_custom
+python TriPoseFusion/train.py --config-name train_custom
 ```
 
 ---

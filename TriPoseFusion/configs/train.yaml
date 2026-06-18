@@ -6,8 +6,8 @@
 # and dilated temporal convolutions to produce robust fused 3D pose estimates.
 #
 # Usage:
-#   python -m TriPoseFusion.trainer.train_triple_fusion --config-name train.yaml
-#   python project/main.py -c configs/train.yaml model.fuse_method=ts_cva
+#   python TriPoseFusion/train.py
+#   python TriPoseFusion/train.py model.geofusion_refiner_layers=3 train.max_epochs=30
 # =============================================================================
 
 # ------ HYDRA CONFIGURATION (Output directory management) -----

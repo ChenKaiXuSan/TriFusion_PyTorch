@@ -15,17 +15,17 @@
 python -m TriPoseFusion.trainer.train_triple_fusion
 
 # 使用特定配置文件
-python project/main.py --config-name train.yaml
+python TriPoseFusion/train.py --config-name train.yaml
 ```
 
 ### 修改配置参数
 
 ```bash
 # 运行时覆盖参数 (Hydra 风格)
-python project/main.py model.geofusion_refiner_layers=3 train.max_epochs=30
+python TriPoseFusion/train.py model.geofusion_refiner_layers=3 train.max_epochs=30
 
 # 使用不同视图组合
-python project/main.py +view_name='[front]' view='single'
+python TriPoseFusion/train.py +view_name='[front]' view='single'
 ```
 
 ---
@@ -319,7 +319,7 @@ with initialize_config_dir(config_dir="./configs"):
 
 ```bash
 # 查看 model 配置
-python project/main.py --cfg model
+python TriPoseFusion/train.py --cfg model
 ```
 
 ---
