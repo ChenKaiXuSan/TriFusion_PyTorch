@@ -58,6 +58,15 @@ def _selected_folds(config: DictConfig, all_folds: Iterable[int]) -> list[int]:
     return [int(fold)]
 
 
+def _selected_splits(config: DictConfig) -> list[str]:
+    split = str(_cfg_get(config, "eval.split", "val")).lower()
+    if split == "all":
+        return ["train", "val"]
+    if split not in {"train", "val"}:
+        raise ValueError(f"Unsupported eval.split={split!r}. Use train, val, or all.")
+    return [split]
+
+
 def _resolve_ckpt(config: DictConfig) -> Path:
     ckpt_path = _cfg_get(config, "eval.ckpt_path")
     if not ckpt_path:
@@ -340,7 +349,7 @@ def _save_results(
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["fold"] + metric_names)
-        for fold, metrics in sorted(per_fold.items(), key=lambda item: int(item[0])):
+        for fold, metrics in sorted(per_fold.items(), key=lambda item: str(item[0])):
             writer.writerow([fold] + [metrics.get(name, "") for name in metric_names])
         writer.writerow([])
         writer.writerow(["metric", "mean", "std", "n"])
@@ -783,7 +792,6 @@ def main(config: DictConfig) -> None:
     pck_thresholds_raw = _cfg_get(config, "eval.pck_thresholds", [0.02, 0.05, 0.1])
     pck_thresholds = [float(x) for x in pck_thresholds_raw]
 
-    config.eval.ckpt_path = "/home/workspace/kaixu/code/MultiView_DriverAction_PyTorch/logs/train/trifusionpose_['front', 'left', 'right']_16f/2026-06-07/18-33-58/checkpoints/fold_0/last.ckpt"
     ckpt = _resolve_ckpt(config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Running triangulated evaluation on device: %s", device)
@@ -798,7 +806,7 @@ def main(config: DictConfig) -> None:
     for fold in _selected_folds(config, fold_dataset_idx.keys()):
         if fold not in fold_dataset_idx:
             raise KeyError(f"Fold {fold} is not in dataset index JSON.")
-        for flag in ["train", "val"]:
+        for flag in _selected_splits(config):
             if flag not in fold_dataset_idx[fold]:
                 raise KeyError(f"Flag {flag} is not in fold {fold} dataset index.")
             logger.info("Evaluating fold %d split %s", fold, flag)
@@ -813,7 +821,7 @@ def main(config: DictConfig) -> None:
                 pck_thresholds=pck_thresholds,
                 output_dir=output_dir,
             )
-            per_fold[str(fold)] = fold_metrics
+            per_fold[f"{fold}_{flag}"] = fold_metrics
             for person_env_key, entry in fold_person_env_results.items():
                 if person_env_key in merged_person_env_results:
                     existing_metrics = merged_person_env_results[person_env_key].get(
