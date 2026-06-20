@@ -69,9 +69,15 @@ model:
   geofusion_dropout: 0.1            # Dropout rate for regularization
 
   # === IMPROVEMENT 1 (Enhanced): CROSS-VIEW ATTENTION ===
+  # Enable/disable cross-view attention. Set false for no-attention ablation.
+  geofusion_use_cross_view_attention: true
+
   # Number of attention heads in multi-head self-attention
   # Recommended: hidden_dim / num_heads = 32 or larger per head
   geofusion_attention_num_heads: 4
+
+  # Enable/disable learned joint-wise view gate. Set false for uniform-gate ablation.
+  geofusion_use_learned_gate: true
 
   # === FEATURE ENGINEERING OPTIONS ===
   # Enable/disable various input feature types:

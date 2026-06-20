@@ -487,6 +487,10 @@ class TriViewKeypointFusionNet(nn.Module):
         self.use_robust_canonicalization = bool(
             getattr(cfg, "geofusion_use_robust_canonicalization", False)
         )
+        self.use_cross_view_attention = bool(
+            getattr(cfg, "geofusion_use_cross_view_attention", True)
+        )
+        self.use_learned_gate = bool(getattr(cfg, "geofusion_use_learned_gate", True))
         self.gate_entropy_reg_lambda = float(getattr(cfg, "geofusion_gate_entropy_reg_lambda", 0.0))
 
         # Calculate feature dimension based on configuration
@@ -507,11 +511,14 @@ class TriViewKeypointFusionNet(nn.Module):
 
         # IMPROVEMENT #1: Cross-view attention with positional encoding
         num_attention_heads = int(getattr(cfg, "geofusion_attention_num_heads", 4))
-        self.cross_view_attention = CrossViewAttention(
-            embed_dim=self.hidden_dim,
-            num_heads=num_attention_heads,
-            num_views=self.num_views,
-        )
+        if self.use_cross_view_attention:
+            self.cross_view_attention = CrossViewAttention(
+                embed_dim=self.hidden_dim,
+                num_heads=num_attention_heads,
+                num_views=self.num_views,
+            )
+        else:
+            self.cross_view_attention = nn.Identity()
 
         self.gate_head = nn.Sequential(
             nn.LayerNorm(self.hidden_dim),
@@ -757,13 +764,19 @@ class TriViewKeypointFusionNet(nn.Module):
             encoded.append(self.view_encoder(feat))
         hidden = torch.stack(encoded, dim=3)  # Shape: (B,T,J,V,H)
 
-        # IMPROVEMENT #1: Cross-view attention before gating
-        # Allow views to communicate and share information for better occlusion handling
+        # IMPROVEMENT #1: Cross-view attention before gating.
+        # Can be disabled for ablation with model.geofusion_use_cross_view_attention=false.
         hidden_attended = self.cross_view_attention(hidden)
 
         # Step 3: Learn view weights with attended features
-        gate_logits = self.gate_head(hidden_attended).squeeze(-1)  # (B,T,J,V)
-        alpha = F.softmax(gate_logits, dim=-1)  # Joint-wise view weights
+        if self.use_learned_gate:
+            gate_logits = self.gate_head(hidden_attended).squeeze(-1)  # (B,T,J,V)
+            alpha = F.softmax(gate_logits, dim=-1)  # Joint-wise view weights
+        else:
+            alpha = hidden_attended.new_full(
+                hidden_attended.shape[:-1],
+                1.0 / float(self.num_views),
+            )
 
         # IMPROVEMENT #2: Gate regularization for stability (computed but not backprop'd in forward)
         # Entropy regularization to prevent views from being completely ignored

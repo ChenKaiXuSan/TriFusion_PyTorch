@@ -24,14 +24,16 @@ TriPoseFusion 的对比实验主要回答一个问题：
 
 ## 实验列表
 
-| 实验名 | 脚本 | Dilated TCN | Multi-scale Velocity | Gate Entropy | Robust Canonicalization | 目的 |
-|--------|------|-------------|----------------------|--------------|--------------------------|------|
-| `base_simple` | `pegasus/train_trid_pose_fusion_base_simple.sh` | 关 | 关 | 关 | 关 | 最基础 baseline |
-| `dilated_tcn` | `pegasus/train_trid_pose_fusion_dilated_tcn.sh` | 开 | 关 | 关 | 关 | 单独验证膨胀 TCN |
-| `multiscale_velocity` | `pegasus/train_trid_pose_fusion_multiscale_velocity.sh` | 关 | 开 | 关 | 关 | 单独验证多尺度速度特征 |
-| `gate_entropy` | `pegasus/train_trid_pose_fusion_gate_entropy.sh` | 关 | 关 | 开，`lambda=0.01` | 关 | 单独验证视角门控熵正则 |
-| `robust_canon` | `pegasus/train_trid_pose_fusion_robust_canon.sh` | 关 | 关 | 关 | 开 | 单独验证鲁棒 canonicalization |
-| `full` | `pegasus/train_trid_pose_fusion_full.sh` | 开 | 开 | 开，`lambda=0.01` | 开 | 完整 TriPoseFusion |
+| 实验名 | 脚本 | Dilated TCN | Multi-scale Velocity | Gate Entropy | Robust Canonicalization | Cross-view Attention | Learned Gate | 目的 |
+|--------|------|-------------|----------------------|--------------|--------------------------|----------------------|--------------|------|
+| `base_simple` | `pegasus/train_trid_pose_fusion_base_simple.sh` | 关 | 关 | 关 | 关 | 开 | 开 | 最基础 baseline |
+| `dilated_tcn` | `pegasus/train_trid_pose_fusion_dilated_tcn.sh` | 开 | 关 | 关 | 关 | 开 | 开 | 单独验证膨胀 TCN |
+| `multiscale_velocity` | `pegasus/train_trid_pose_fusion_multiscale_velocity.sh` | 关 | 开 | 关 | 关 | 开 | 开 | 单独验证多尺度速度特征 |
+| `gate_entropy` | `pegasus/train_trid_pose_fusion_gate_entropy.sh` | 关 | 关 | 开，`lambda=0.01` | 关 | 开 | 开 | 单独验证视角门控熵正则 |
+| `robust_canon` | `pegasus/train_trid_pose_fusion_robust_canon.sh` | 关 | 关 | 关 | 开 | 开 | 开 | 单独验证鲁棒 canonicalization |
+| `full` | `pegasus/train_trid_pose_fusion_full.sh` | 开 | 开 | 开，`lambda=0.01` | 开 | 开 | 开 | 完整 TriPoseFusion |
+| `no_cross_view_attention` | `pegasus/train_trid_pose_fusion_no_cross_view_attention.sh` | 开 | 开 | 开，`lambda=0.01` | 开 | 关 | 开 | 验证跨视角 attention 的贡献 |
+| `uniform_gate` | `pegasus/train_trid_pose_fusion_uniform_gate.sh` | 开 | 开 | 关 | 开 | 开 | 关 | 验证 learned gate 是否优于均匀视角权重 |
 
 ## 单个实验提交
 
@@ -44,6 +46,8 @@ qsub pegasus/train_trid_pose_fusion_multiscale_velocity.sh
 qsub pegasus/train_trid_pose_fusion_gate_entropy.sh
 qsub pegasus/train_trid_pose_fusion_robust_canon.sh
 qsub pegasus/train_trid_pose_fusion_full.sh
+qsub pegasus/train_trid_pose_fusion_no_cross_view_attention.sh
+qsub pegasus/train_trid_pose_fusion_uniform_gate.sh
 ```
 
 ## 批量提交全部实验
@@ -73,14 +77,15 @@ MAX_EPOCHS=20 BATCH_SIZE=16 NUM_FRAMES=16 DEVICES=1 \
 
 | 文件 | 作用 |
 |------|------|
-| `pegasus/train_trid_pose_fusion_ablation.sh` | 通用 runner，根据 `EXPERIMENT_NAME` 设置模块开关 |
 | `pegasus/train_trid_pose_fusion_base_simple.sh` | 固定 `EXPERIMENT_NAME=base_simple`，固定 `FOLD=0` |
 | `pegasus/train_trid_pose_fusion_dilated_tcn.sh` | 固定 `EXPERIMENT_NAME=dilated_tcn`，固定 `FOLD=0` |
 | `pegasus/train_trid_pose_fusion_multiscale_velocity.sh` | 固定 `EXPERIMENT_NAME=multiscale_velocity`，固定 `FOLD=0` |
 | `pegasus/train_trid_pose_fusion_gate_entropy.sh` | 固定 `EXPERIMENT_NAME=gate_entropy`，固定 `FOLD=0` |
 | `pegasus/train_trid_pose_fusion_robust_canon.sh` | 固定 `EXPERIMENT_NAME=robust_canon`，固定 `FOLD=0` |
 | `pegasus/train_trid_pose_fusion_full.sh` | 固定 `EXPERIMENT_NAME=full`，固定 `FOLD=0` |
-| `pegasus/submit_trid_pose_fusion_ablation.sh` | 批量提交 6 个独立实验脚本 |
+| `pegasus/train_trid_pose_fusion_no_cross_view_attention.sh` | 固定 `EXPERIMENT_NAME=no_cross_view_attention`，固定 `FOLD=0` |
+| `pegasus/train_trid_pose_fusion_uniform_gate.sh` | 固定 `EXPERIMENT_NAME=uniform_gate`，固定 `FOLD=0` |
+| `pegasus/submit_trid_pose_fusion_ablation.sh` | 批量提交 8 个独立实验脚本 |
 
 ## 训练日志位置
 
@@ -94,6 +99,8 @@ MAX_EPOCHS=20 BATCH_SIZE=16 NUM_FRAMES=16 DEVICES=1 \
 | `gate_entropy` | `logs/pegasus/trid_gate_entropy.out` | `logs/pegasus/trid_gate_entropy.err` |
 | `robust_canon` | `logs/pegasus/trid_robust_canon.out` | `logs/pegasus/trid_robust_canon.err` |
 | `full` | `logs/pegasus/trid_full.out` | `logs/pegasus/trid_full.err` |
+| `no_cross_view_attention` | `logs/pegasus/trid_no_cross_view_attention.out` | `logs/pegasus/trid_no_cross_view_attention.err` |
+| `uniform_gate` | `logs/pegasus/trid_uniform_gate.out` | `logs/pegasus/trid_uniform_gate.err` |
 
 训练产生的 TensorBoard、CSV 和 checkpoint 会进入：
 
@@ -193,4 +200,3 @@ test/alpha_right
 3. `model.geofusion_use_robust_canonicalization` 是当前模型实际读取的配置名。
 4. `train.yaml` 里旧名字 `geofusion_use_robust_canon` 与当前模型读取名不一致，命令行和脚本里应使用 `geofusion_use_robust_canonicalization`。
 5. 当前训练日志能反映 loss 和视角 alpha；如果需要最终几何指标，需要额外跑 eval。
-
