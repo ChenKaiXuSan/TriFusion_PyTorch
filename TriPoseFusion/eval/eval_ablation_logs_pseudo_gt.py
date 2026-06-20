@@ -82,7 +82,9 @@ def select_checkpoints(run_dir: Path, fold: int, policy: str) -> list[Path]:
 
     ckpts = sorted(_checkpoint_dir(run_dir, fold).glob("*.ckpt"))
     if not ckpts:
-        raise FileNotFoundError(f"No checkpoints found in {_checkpoint_dir(run_dir, fold)}")
+        raise FileNotFoundError(
+            f"No checkpoints found in {_checkpoint_dir(run_dir, fold)}"
+        )
     return ckpts
 
 
@@ -158,7 +160,9 @@ def build_jobs(
     jobs: list[EvalJob] = []
     for run_dir in discover_runs(logs_root=logs_root, pattern=pattern, fold=fold):
         for ckpt_path in select_checkpoints(run_dir, fold=fold, policy=ckpt_policy):
-            output_dir = output_root / _safe_name(run_dir, logs_root, ckpt_path, ckpt_policy)
+            output_dir = output_root / _safe_name(
+                run_dir, logs_root, ckpt_path, ckpt_policy
+            )
             command = build_eval_command(
                 python_executable=python_executable,
                 eval_script=eval_script,
@@ -170,7 +174,14 @@ def build_jobs(
                 fold=str(fold),
                 extra_overrides=extra_overrides,
             )
-            jobs.append(EvalJob(run_dir=run_dir, ckpt_path=ckpt_path, output_dir=output_dir, command=command))
+            jobs.append(
+                EvalJob(
+                    run_dir=run_dir,
+                    ckpt_path=ckpt_path,
+                    output_dir=output_dir,
+                    command=command,
+                )
+            )
     return jobs
 
 
@@ -241,8 +252,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate each TriPoseFusion ablation run against triangulated pseudo GT."
     )
-    parser.add_argument("--logs-root", type=Path, default=repo_root / "logs" / "train")
-    parser.add_argument("--output-root", type=Path, default=repo_root / "eval" / "logs" / "eval_ablation_pseudo_gt")
+    parser.add_argument(
+        "--logs-root", type=Path, default=repo_root / "logs" / "logs" / "train"
+    )
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=repo_root
+        / "TriPoseFusion"
+        / "eval"
+        / "logs"
+        / "eval_ablation_pseudo_gt",
+    )
     parser.add_argument(
         "--gt-root",
         type=Path,
@@ -261,7 +282,9 @@ def main() -> None:
         help="SAM3D result root used to override paths.sam3d_results_path in old Hydra configs.",
     )
     parser.add_argument("--pattern", type=str, default="trifusion_*")
-    parser.add_argument("--ckpt-policy", choices=("best", "last", "all"), default="best")
+    parser.add_argument(
+        "--ckpt-policy", choices=("best", "last", "all"), default="best"
+    )
     parser.add_argument("--split", choices=("train", "val", "all"), default="val")
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--python", dest="python_executable", default=sys.executable)
@@ -295,7 +318,9 @@ def main() -> None:
         extra_overrides=forwarded_overrides,
     )
     if not jobs:
-        raise RuntimeError(f"No eval jobs found under {args.logs_root} with pattern {args.pattern!r}")
+        raise RuntimeError(
+            f"No eval jobs found under {args.logs_root} with pattern {args.pattern!r}"
+        )
 
     rows: list[dict[str, Any]] = []
     progress = iter_jobs_with_progress(jobs)
