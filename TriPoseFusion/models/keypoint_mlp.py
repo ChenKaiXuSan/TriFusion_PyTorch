@@ -431,6 +431,13 @@ class DilatedTemporalPoseRefiner(nn.Module):
         return delta.reshape(bsz, frames, joints, 3)
 
 
+class ZeroTemporalPoseRefiner(nn.Module):
+    """No-op temporal refiner used for gate-only fusion baselines."""
+
+    def forward(self, pose_btj3: torch.Tensor) -> torch.Tensor:
+        return torch.zeros_like(pose_btj3)
+
+
 class TriViewKeypointFusionNet(nn.Module):
     """Geometry-guided three-view 3D keypoint fusion network.
 
@@ -482,6 +489,7 @@ class TriViewKeypointFusionNet(nn.Module):
         self.eps = float(getattr(cfg, "geofusion_eps", 1e-6))
 
         # IMPROVEMENT CONFIGS (from config file)
+        self.use_temporal_refiner = bool(getattr(cfg, "geofusion_use_temporal_refiner", True))
         self.use_dilated_refiner = bool(getattr(cfg, "geofusion_use_dilated_refiner", True))
         self.use_multiscale_velocity = bool(getattr(cfg, "geofusion_use_multiscale_velocity", True))
         self.use_robust_canonicalization = bool(
@@ -534,8 +542,11 @@ class TriViewKeypointFusionNet(nn.Module):
             dropout=self.dropout,
         )
 
-        # IMPROVEMENT #2: Dilated TCN refiner with exponential receptive field growth
-        if self.use_dilated_refiner:
+        # IMPROVEMENT #2: Dilated TCN refiner with exponential receptive field growth.
+        # Can be disabled to isolate learned gate fusion without temporal modeling.
+        if not self.use_temporal_refiner:
+            self.refiner = ZeroTemporalPoseRefiner()
+        elif self.use_dilated_refiner:
             self.refiner = DilatedTemporalPoseRefiner(
                 joints=self.joints,
                 hidden_dim=int(getattr(cfg, "geofusion_refiner_dim", 256)),

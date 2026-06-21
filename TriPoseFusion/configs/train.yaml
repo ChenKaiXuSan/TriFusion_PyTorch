@@ -112,6 +112,7 @@ model:
 
   # === FEATURE ENGINEERING SWITCHES (ADVANCED) ===
   # Enable advanced feature computing (may increase memory/computation):
+  geofusion_use_temporal_refiner: true     # Set false for gate-only learned fusion baseline
   geofusion_use_dilated_refiner: true      # Use dilated TCN vs standard TCN
   geofusion_use_multiscale_velocity: true  # Multi-scale velocity + acceleration features
 
