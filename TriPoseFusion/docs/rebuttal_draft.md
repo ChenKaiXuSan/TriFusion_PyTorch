@@ -11,7 +11,7 @@
 |---|---|---|
 | A | Procrustes 缺陷披露 + 修正数字 | 文字 ✅，数字【待填:修正评估】 |
 | B | 回退算法伪代码 | ✅ |
-| C | gating 塌缩回应 | 框架 ✅，依赖 c_lam0 重训 + 压力测试 |
+| C | gating 塌缩回应 | ✅ 机理已定（架构级塌缩）；λ_gate=0 与 LOO 重训均未打破；压力测试 before 已出；主张收窄 |
 | D | 绝对误差 vs SOTA | ✅ 分解表已出（躯干 0.340 全场最优、手部 1.580 全场最差），讲法已改写 |
 | E | 学习型基线 | ✅ 已出数（1.9K 参数：MPJPE 0.981 / PA 0.290，优于旧 ckpt 主模型） |
 | F | 伪 GT 可靠性 | ✅（数字已产出） |
@@ -261,8 +261,28 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
    自监督 teacher**：训练时随机屏蔽一个视角（特征置零 + attention mask + gate=0），
    $\mathcal{L}_{tri}$ 目标改为该视角的 canonical 观测——无平凡解、且给 gate
    分化提供梯度；配 λ_nce=0.01、λ_gate=0、按 val/loo_mpjpe 选 ckpt。
-   仍是自监督、不使用伪 GT。结果：【待填:c_loo 957197 vs c_looctl 957198
-   的修正 MPJPE/PA、gate 分布、遮挡压力测试】。
+   仍是自监督、不使用伪 GT。
+   **结果（2026-08-29 00:34；c_loo 957197 / c_looctl 957198，快速版各 32 / 11 分钟）——
+   否定：LOO teacher 没有打破塌缩。**
+
+   | run | 训练目标 | 修正 MPJPE / PA（fold-0 val） | 推理期 gate（per-joint std） | 置零一视角 MPJPE 增幅 | 被置零视角 gate |
+   |---|---|---|---|---|---|
+   | c_full（修正重训） | 中位数 teacher，λ_nce 0.1 | 0.9487 / 0.3459 | 0.333×3（0） | +5.9–7.7% | 0.333 |
+   | c_looctl | 中位数 teacher，λ_nce 0.01，λ_gate 0 | 0.9463 / 0.3474 | 0.333×3（0） | – | – |
+   | **c_loo** | **留一视角 teacher**，λ_nce 0.01，λ_gate 0 | 0.9516 / 0.3446 | 0.333×3（0） | +3.5–4.7% | **0.333** |
+
+   - 训练期 val/loo_mpjpe 仅 0.1215 → 0.1152 m（−5%）：模型对"两视角预测第三视角"
+     学到的很少，基本仍是取剩余视角均值；训练期 gate 0.331/0.334/0.336。
+   - 推理期 gate 精确均匀且 per-joint std = 0：gate head 输出对所有关节/视角恒等，
+     说明在 shared encoder + cross-view attention 之后，三视角 token 对 gate 已不可
+     区分（或 gate head 在无梯度信号下被 weight decay 压成常量）——**塌缩是架构级
+     的，与 teacher 定义、熵正则、λ_nce 均无关**。
+   - 旁证仍然成立：E 点的 1.9K 基线直接以跨视角几何一致性为输入特征，学出了非均匀
+     权重（0.41/0.32/0.27），即"可学的自适应加权"需要显式的视角质量特征进 gate，
+     而不是 attention 后的同质化特征——这是修订稿的架构方向，不在 rebuttal 内承诺。
+   - **rebuttal 写法：如实报告 LOO 为附加实验且未解决塌缩；C 点主张收窄为
+     "canonicalization + uniform fusion"，把 adaptive gating 列为未成立的设计意图。**
+   - Drive&Act 零样本（c_loo ckpt，作业 957257）：【待填，预计与旧 ckpt 无差别】。
 3. **旁证（E 点学习型基线）**：在完全相同的 keypoint 输入上，一个 1.9K 参数、
    仅用跨视角几何一致性特征的融合器学出了明显非均匀的视角权重
    （front 0.41 / left 0.32 / right 0.27）并因此优于固定融合——说明**自适应
