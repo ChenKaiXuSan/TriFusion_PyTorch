@@ -152,10 +152,13 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
 
 ### E. 缺学习型融合基线
 
-新增 confidence-weighted 学习型融合基线（相同 keypoint 输入、相同划分）：
-每视角每关节以三角化诊断量（重投影残差/深度）为特征，学习逐关节视角权重
-后加权融合，再接与主模型同容量的时间平滑头。结果：
-【待填:learned_fusion_baseline MPJPE / PA-MPJPE】。
+新增学习型融合基线（相同 keypoint 输入、相同 GroupKFold 划分、与 Table 3
+完全同一 compute_metrics/掩码协议）：逐帧·关节·视角特征
+[SAM3D 置信度, 与跨视角均值的距离（几何一致性）, 视角有限性] + 关节索引
+embedding → 小型 MLP 逐关节视角权重 → softmax（掩掉无效视角）加权融合 →
+深度可分离时间卷积残差头。模型 ~2K 参数（刻意远小于主模型 0.87M，隔离
+"可学习加权"本身的贡献）。同时在同一数据上报告固定 confidence 加权融合
+作对照锚点。结果：【待填:learned_fusion_baseline MPJPE / PA-MPJPE vs 锚点】。
 
 ---
 
@@ -212,5 +215,6 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
 | per-joint 分解（D/F） | 上述 corrected 评估的 per_joint_mpjpe 输出 | 随评估产出 |
 | c_lam0 gate 分布（C） | Pegasus job 955579 | 排队中 |
 | 重训 ablation（Table 4） | Pegasus jobs 955575–955578 | 排队中 |
-| 遮挡压力测试（C） | occlusion_stress_test.py | 脚本编写中 |
-| 学习型基线（E） | learned fusion baseline | 实现中 |
+| 遮挡压力测试（C） | occlusion_stress_test.py | 脚本已验通，待重训 ckpt 跑全量 |
+| 学习型基线（E） | learned_fusion_baseline.py | 缓存构建中，随后 fold-0 全量训练 |
+| Drive&Act 公开集评测（xS2o Mandatory Eval） | eval_driveandact_baselines.py（另一会话负责，review-fixes 分支） | SAM3D GPU 阵列作业 955562 运行中（2–4h） |

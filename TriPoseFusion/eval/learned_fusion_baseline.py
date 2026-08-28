@@ -32,7 +32,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from eval_fusion_baselines_pesudo_gt import compute_metrics  # noqa: E402
+from eval_fusion_baselines_pesudo_gt import compute_metrics, fuse_views  # noqa: E402
 
 ENV_KEYS = {"夜多い", "夜少ない", "昼多い", "昼少ない"}
 
@@ -102,10 +102,19 @@ class SeqStore:
 
 
 class LearnedFusion(nn.Module):
-    def __init__(self, hidden: int = 32, temporal: bool = True, kernel: int = 5) -> None:
+    def __init__(
+        self,
+        hidden: int = 32,
+        temporal: bool = True,
+        kernel: int = 5,
+        num_joints: int = 52,
+        joint_emb: int = 8,
+    ) -> None:
         super().__init__()
+        self.joint_emb = nn.Embedding(num_joints, joint_emb) if joint_emb > 0 else None
+        in_dim = 3 + (joint_emb if joint_emb > 0 else 0)
         self.weight_mlp = nn.Sequential(
-            nn.Linear(3, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU(),
+            nn.Linear(in_dim, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU(),
             nn.Linear(hidden, 1),
         )
         self.temporal = temporal
@@ -127,6 +136,12 @@ class LearnedFusion(nn.Module):
         ) * finite  # (B,T,J,V)
         conf = torch.nan_to_num(view_conf, nan=0.0)
         feats = torch.stack([conf, disagreement, finite.float()], dim=-1)
+        if self.joint_emb is not None:
+            b, t, j, v, _ = feats.shape
+            emb = self.joint_emb(
+                torch.arange(j, device=feats.device)
+            )[None, None, :, None, :].expand(b, t, j, v, -1)
+            feats = torch.cat([feats, emb], dim=-1)
         logits = self.weight_mlp(feats).squeeze(-1)  # (B,T,J,V)
         logits = logits.masked_fill(~finite, -1e4)
         weights = torch.softmax(logits, dim=-1)
@@ -176,6 +191,22 @@ def evaluate(model: LearnedFusion, store: SeqStore, pck_thresholds) -> dict:
                 )
     model.train()
     return {"rows": rows}
+
+
+def fixed_fusion_anchor(store: SeqStore, pck_thresholds) -> list[dict]:
+    """同一缓存数据上的固定 confidence 加权融合（Table 3 同款），作对照锚点。"""
+    rows = []
+    for s in store.seqs:
+        pred = fuse_views(s["view_pose"], s["view_conf"], "confidence")
+        m = compute_metrics(
+            pred=pred,
+            gt=s["gt_pose"],
+            valid_mask=s["gt_valid"],
+            pck_thresholds=tuple(pck_thresholds),
+        )
+        if m:
+            rows.append({"person": s["person"], "env": s["env"], "metrics": m})
+    return rows
 
 
 def summarize(rows: list[dict]) -> dict:
@@ -236,6 +267,10 @@ def main() -> None:
     train_store = SeqStore(args.cache_dir, train_pairs)
     val_store = SeqStore(args.cache_dir, val_pairs)
 
+    anchor_rows = fixed_fusion_anchor(val_store, args.pck_thresholds)
+    anchor_agg = summarize(anchor_rows)
+    print(f"fixed-confidence anchor (val): {json.dumps(anchor_agg)}")
+
     model = LearnedFusion(hidden=args.hidden, temporal=args.temporal)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"model params: {n_params}")
@@ -276,6 +311,7 @@ def main() -> None:
         },
         "best_step": best["step"],
         "best_val": best["agg"],
+        "fixed_confidence_anchor_val": anchor_agg,
         "history": history,
         "per_sequence": best["rows"],
     }
