@@ -23,6 +23,15 @@
 
 ## 0. 致全体评审的共同说明（诚实披露）
 
+> ⚠️ **最高优先级、须作者本人定稿（本草稿不代写）：伪 GT 生成流程的表述。**
+> 论文 4.3 / 4.4 称评估参考由"manually checked and corrected"的 2D 关键点三角化而来。
+> 另一会话在核对生成脚本时记录了与此不一致的事实（无人工修正环节、外参未标定、
+> 外参 BA 优化等）；本会话仅独立核实了"前视参与率 8.1%、各视角 valid 计数与论文
+> Table 2 一致"。若"人工修正"表述与实际不符，这是比任何数字更严重的问题：rebuttal
+> 共同说明必须首先如实更正（对方建议措辞 "automatic triangulation reference with
+> quality filtering"），F 点把外参优化作为 GT 稳健性分析而非新 GT。**请作者确认实际
+> 流程后决定措辞；GT 生成本身不在本会话改动范围内。**
+
 We thank all reviewers for their careful reading. Prompted by R-LAYQ's observation
 that PA-MPJPE exceeds MPJPE for the canonicalized baseline (Table 3), we audited our
 evaluation code and found **an implementation error in the Procrustes alignment**:
