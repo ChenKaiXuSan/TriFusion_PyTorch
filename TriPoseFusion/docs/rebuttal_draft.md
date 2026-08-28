@@ -322,7 +322,24 @@ PCK@50mm 42%、@100mm 94%。）
   自建伪 GT——同一管线在标准 body 协议下即为厘米级。
 - 局限如实写：OpenPose 伪 GT 厘米级下限；SAM3D 默认体型躯干尺度比 GT 大 ~18%
   （留在未对齐 MPJPE 内，PA 消除）；1 fps 采样。
-- 【待填:TriPoseFusion ckpt 零样本评测——需 30 fps 连续窗口，另一会话补抽密集片段后报告】
+- **TriPoseFusion ckpt 零样本评测（已出，`driveandact_results/driveandact_model_*.json`，
+  README 有表格与口径）**：同 6 个 run 各 3 段 × 20 s 连续 30 fps（665 个 16 帧窗口 /
+  10,640 帧），论文原始 fold-0 ckpt、未在 Drive&Act 训练或微调；关节集 hs10
+  （模型 52 关节无肘/髋，与 BODY-25 的公共集：头 5 + 肩 2 + 腕 2 + 颈），
+  主指标 PA-MPJPE，基线在模型自身 canonical 系内同协议：
+
+  | 方法（hs10，PA-MPJPE mm） | 值 |
+  |---|---|
+  | single front / left / right | 26.9 / 31.9 / 24.0 |
+  | canonicalize + mean（免训练） | 23.1 |
+  | TriPoseFusion full ckpt（零样本） | 23.7 |
+  | TriPoseFusion robust_canon ckpt（零样本） | 24.7 |
+
+  如实三点：① 零样本迁移成立——优于任一单视角，与评审引用的 SOTA 区间同量级；
+  ② 学习模块相对免训练 canon+mean **无增益**（23.7 vs 23.1），与消融、修正重训
+  和评审判断一致；③ gate 塌缩在 Drive&Act 上复现（两个 ckpt α 均 0.3333×3）。
+  注意 hs10 的 PA（23 mm）与 body14 的 PA（31 mm）不可互比（hs10 无肘/髋）。
+  修正重训/LOO ckpt 可用 `pipeline/job_model_eval.sh` 改路径重跑（约 10 分钟）。
 
 ---
 
