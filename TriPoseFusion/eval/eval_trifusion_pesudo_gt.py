@@ -694,6 +694,60 @@ def _load_triangulated_sequence(
     )
 
 
+# 52-joint layout after KEEP_KEYPOINT_INDICES (see map_config.py):
+# 0-4 head, 5-6 shoulders, 7-48 hands (right 7-27, left 28-48), 49-51 acromions + neck.
+JOINT_GROUPS = {
+    "head": list(range(0, 5)),
+    "shoulders_neck": [5, 6, 49, 50, 51],
+    "body": list(range(0, 7)) + [49, 50, 51],
+    "hands": list(range(7, 49)),
+}
+
+
+def _save_joint_error_results(
+    output_dir: Path,
+    fold: int,
+    err_sum: torch.Tensor | None,
+    err_count: torch.Tensor | None,
+) -> None:
+    """Per-joint MPJPE (valid-point weighted) plus body/hand group summaries."""
+    if err_sum is None or err_count is None:
+        return
+    err_sum_np = err_sum.detach().cpu().numpy().astype(np.float64)
+    err_count_np = err_count.detach().cpu().numpy().astype(np.float64)
+    per_joint = np.where(err_count_np > 0, err_sum_np / np.maximum(err_count_np, 1.0), np.nan)
+
+    groups = {}
+    for name, idx in JOINT_GROUPS.items():
+        idx = [i for i in idx if i < per_joint.shape[0]]
+        cnt = float(err_count_np[idx].sum())
+        groups[name] = {
+            "joint_indices": idx,
+            "mpjpe": float(err_sum_np[idx].sum() / cnt) if cnt > 0 else None,
+            "count": cnt,
+        }
+
+    payload = {
+        "joints": [
+            {"joint_index": j, "count": float(err_count_np[j]), "mpjpe": (None if np.isnan(per_joint[j]) else float(per_joint[j]))}
+            for j in range(per_joint.shape[0])
+        ],
+        "groups": groups,
+    }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / f"joint_mpjpe_fold_{fold}.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    csv_path = output_dir / f"joint_mpjpe_fold_{fold}.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["joint_index", "count", "mpjpe"])
+        for row in payload["joints"]:
+            writer.writerow([row["joint_index"], row["count"], row["mpjpe"]])
+    logger.info("Saved per-joint MPJPE JSON/CSV: %s", json_path)
+    logger.info("Joint-group MPJPE: %s", {k: v["mpjpe"] for k, v in groups.items()})
+
+
 def _evaluate_fold(
     config: DictConfig,
     fold: int,
@@ -712,6 +766,8 @@ def _evaluate_fold(
     item_records: List[Dict[str, Any]] = []
     joint_alpha_sum: torch.Tensor | None = None
     joint_alpha_count: torch.Tensor | None = None
+    joint_err_sum: torch.Tensor | None = None
+    joint_err_count: torch.Tensor | None = None
     skipped_samples = 0
     split_key = "train" if split == "train" else "val"
     sample_lookup = _build_sample_lookup(fold_dataset[split_key])
@@ -801,6 +857,21 @@ def _evaluate_fold(
                 )
                 if sample_metrics:
                     item_metrics.append(sample_metrics)
+                    pred_sample = pred[sample_idx]
+                    dist_sample = torch.linalg.norm(pred_sample - gt_tensor, dim=-1)
+                    valid_err = (
+                        valid_tensor.bool()
+                        & torch.isfinite(pred_sample).all(dim=-1)
+                        & torch.isfinite(gt_tensor).all(dim=-1)
+                    )
+                    per_joint_err = torch.where(valid_err, dist_sample, torch.zeros_like(dist_sample)).sum(dim=0)
+                    per_joint_err_count = valid_err.sum(dim=0).to(per_joint_err.dtype)
+                    if joint_err_sum is None:
+                        joint_err_sum = torch.zeros_like(per_joint_err)
+                        joint_err_count = torch.zeros_like(per_joint_err_count)
+                    joint_err_sum += per_joint_err
+                    joint_err_count += per_joint_err_count
+
                     alpha_sample = out["alpha"][sample_idx].detach()
                     valid_for_alpha = valid_tensor[: alpha_sample.shape[0], : alpha_sample.shape[1]].bool()
                     alpha_valid = alpha_sample * valid_for_alpha.unsqueeze(-1).to(alpha_sample.dtype)
@@ -843,6 +914,12 @@ def _evaluate_fold(
         view_names=list(module.model.view_names),
         alpha_sum=joint_alpha_sum,
         alpha_count=joint_alpha_count,
+    )
+    _save_joint_error_results(
+        output_dir=output_dir,
+        fold=fold,
+        err_sum=joint_err_sum,
+        err_count=joint_err_count,
     )
 
     logger.info("Fold %d metrics: %s", fold, fold_metrics)
