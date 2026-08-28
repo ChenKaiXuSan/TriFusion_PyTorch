@@ -57,8 +57,24 @@ PA-MPJPE 0.062 m，PA < MPJPE 反常消失——归因于上述三处修复本�
 
 - 旧 Table 3 canonicalized 基线：MPJPE 0.969 / PA-MPJPE 1.664（异常来源 =
   转置旋转 + 非最优 scale + 塌缩帧）。
-- 修正后基线：MPJPE 【待填:corrected_fusion_baselines】 / PA-MPJPE 【待填】
-  （单序列快检 0.304 / 0.062，全量运行中）。
+- **修正后 Table 3 基线（88 序列均值，canonicalized，修正 Procrustes）**：
+
+  | 行 | MPJPE | PA-MPJPE | PCK@0.10 |
+  |---|---|---|---|
+  | single front | 0.987 | 0.600 | 0.116 |
+  | single left | 0.961 | 0.536 | 0.110 |
+  | single right | 0.974 | 0.552 | 0.107 |
+  | best single | 0.952 | 0.565 | 0.113 |
+  | fuse mean | 0.971 | 0.564 | 0.111 |
+  | fuse median | 0.971 | 0.560 | 0.112 |
+  | median + smooth (w5) | 0.971 | 0.559 | 0.112 |
+  | fuse confidence | = mean（SAM3D 输出无逐关节置信度，退化为均匀权重；正文须注明或删行） |
+
+  **PA < MPJPE 反常在所有行消失。** 主模型（旧 ckpt，fold0 val 16 序列）
+  MPJPE 0.949 / PA 0.346 / PCK@0.10 0.159——相对基线 PA **−38%**，MPJPE −2%。
+  ⚠️ 口径：基线是 88 序列均值、模型是 fold0 val 子集，另一会话正在做同子集
+  对照（`corrected_fold0_val_comparison.json`）【待填:同子集对照数字】，
+  论文表格必须用同子集数字。
 - **主结果（full 模型，旧 ckpt + 修正评估，fold0 val）：MPJPE 0.949 /
   PA-MPJPE 0.346**（论文原 0.412 / 0.275）。⚠️ 方向与直觉相反：旧
   canonicalization 塌缩 bug 使 GT 与预测同时塌缩到原点，**人为压低**了论文
@@ -159,11 +175,12 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
 
 新增学习型融合基线（相同 keypoint 输入、相同 GroupKFold 划分、与 Table 3
 完全同一 compute_metrics/掩码协议）：逐帧·关节·视角特征
-[SAM3D 置信度, 与跨视角均值的距离（几何一致性）, 视角有限性] + 关节索引
-embedding → 小型 MLP 逐关节视角权重 → softmax（掩掉无效视角）加权融合 →
-深度可分离时间卷积残差头。模型 ~2K 参数（刻意远小于主模型 0.87M，隔离
-"可学习加权"本身的贡献）。同时在同一数据上报告固定 confidence 加权融合
-作对照锚点。结果：【待填:learned_fusion_baseline MPJPE / PA-MPJPE vs 锚点】。
+[与跨视角均值的距离（几何一致性）, 视角有限性, （SAM3D 置信度——实测恒为 1，
+无信息，保留仅为接口一致）] + 关节索引 embedding → 小型 MLP 逐关节视角权重 →
+softmax（掩掉无效视角）加权融合 → 深度可分离时间卷积残差头。模型 ~2K 参数
+（刻意远小于主模型 0.87M，隔离"可学习加权"本身的贡献）。同时在同一数据上
+报告固定加权融合（= mean，因置信度缺失）作对照锚点。
+结果：【待填:learned_fusion_baseline MPJPE / PA-MPJPE vs 锚点】。
 
 ### I. "Mandatory Evaluation on Drive&Act" — 已完成（零样本 + 免训练融合）
 
