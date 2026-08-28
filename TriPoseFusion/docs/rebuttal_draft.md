@@ -282,7 +282,9 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
      而不是 attention 后的同质化特征——这是修订稿的架构方向，不在 rebuttal 内承诺。
    - **rebuttal 写法：如实报告 LOO 为附加实验且未解决塌缩；C 点主张收窄为
      "canonicalization + uniform fusion"，把 adaptive gating 列为未成立的设计意图。**
-   - Drive&Act 零样本（c_loo ckpt，作业 957257）：【待填，预计与旧 ckpt 无差别】。
+   - Drive&Act 零样本（c_loo ckpt，作业 957257，00:37 完成）：hs10 PA-MPJPE
+     **25.7 mm**（旧 full ckpt 23.7、免训练 canon+mean 23.1、best single right 24.0），
+     gate 0.3333×3——外部数据上同样未见改善，甚至略差于均值融合。
 3. **旁证（E 点学习型基线）**：在完全相同的 keypoint 输入上，一个 1.9K 参数、
    仅用跨视角几何一致性特征的融合器学出了明显非均匀的视角权重
    （front 0.41 / left 0.32 / right 0.27）并因此优于固定融合——说明**自适应
