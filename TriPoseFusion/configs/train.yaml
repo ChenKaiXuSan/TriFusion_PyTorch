@@ -108,6 +108,12 @@ model:
 
   info_nce_temperature: 0.1         # Temperature scaling for InfoNCE logits
 
+  # === LEAVE-ONE-VIEW-OUT SELF-SUPERVISED TEACHER ===
+  # true: 每个样本随机屏蔽一个视角，L_tri 的目标改为该视角的 canonical 观测
+  # （原中位数 teacher 的最优解是均匀融合，留一视角目标没有平凡解）。推理时不屏蔽。
+  loo_teacher: false
+  loo_prob: 1.0                     # 训练时每个样本被屏蔽一个视角的概率
+
   # === IMPROVEMENT 2: GATE REGULARIZATION ===
   # Controls regularization strength to prevent some views from being ignored:
   geofusion_gate_entropy_reg_lambda: 0.01
@@ -131,8 +137,10 @@ train:
   devices: 2                  # Number of GPUs to use
   grad_clip_val: 1.0          # Gradient clipping value (norm-based)
   fold: 0                     # Cross-validation fold ID (0-4 for 5-fold CV)
-  early_stop_patience: 0      # >0 时按 val/loss 提前终止（epoch 数）；0 = 关闭
+  early_stop_patience: 0      # >0 时按 monitor_metric 提前终止（验证次数）；0 = 关闭
   check_val_every_n_epoch: 1  # 每 N 个 epoch 验证一次
+  val_check_interval: 1.0     # <1.0 时按 epoch 比例验证，如 0.25 = 每 1/4 epoch
+  monitor_metric: val/loss    # ckpt/early-stop 监控指标；留一视角训练用 val/loo_mpjpe
 
   # View configuration for multi-view training
   view: multi                 # 'single' or 'multi'

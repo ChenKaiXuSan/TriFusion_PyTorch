@@ -129,11 +129,13 @@ def train_one_fold(
         name=f"fold_{fold}",
     )
 
+    # 选 ckpt 的指标：默认 val/loss（复合损失，被 InfoNCE 主导）；留一视角训练时用 val/loo_mpjpe
+    monitor = str(hparams.train.get("monitor_metric", "val/loss") or "val/loss")
     checkpoint = ModelCheckpoint(
         dirpath=os.path.join(hparams.log_path, "checkpoints", f"fold_{fold}"),
-        filename="{epoch}-{val/loss:.2f}",
+        filename="{epoch}-{step}-{" + monitor + ":.3f}",
         auto_insert_metric_name=False,
-        monitor="val/loss",
+        monitor=monitor,
         mode="min",
         save_last=True,
         save_top_k=2,
@@ -149,7 +151,7 @@ def train_one_fold(
     early_stop_patience = int(hparams.train.get("early_stop_patience", 0) or 0)
     if early_stop_patience > 0:
         callbacks.append(
-            EarlyStopping(monitor="val/loss", mode="min", patience=early_stop_patience)
+            EarlyStopping(monitor=monitor, mode="min", patience=early_stop_patience)
         )
 
     trainer = Trainer(
@@ -159,6 +161,8 @@ def train_one_fold(
         max_epochs=hparams.train.max_epochs,
         logger=[tb_logger, csv_logger],
         check_val_every_n_epoch=int(hparams.train.get("check_val_every_n_epoch", 1) or 1),
+        # <1.0 时按 epoch 比例验证（最优点常在 epoch 0 内部）
+        val_check_interval=float(hparams.train.get("val_check_interval", 1.0) or 1.0),
         callbacks=callbacks,
     )
 
