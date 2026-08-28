@@ -105,6 +105,37 @@ neck → x 轴为零向量 → 两次叉积后旋转矩阵为零矩阵 → 整�
 - 仍成立的结论：手部主导绝对误差（所有方法手部/躯干 ≈3.5–4.7×）；单视图 2.078 m 是原始相机
   坐标系未 canonicalize 的数字；模型 0.87M 参数 / CPU 6.2 ms/帧。
 
+## 二·六、修正版全 88 序列基线数字与伪 GT 事实（2026-08-28）
+
+修正度量代码、旧 GT（与论文 Table 2 完全一致：多视角 P95 26.05 vs 26.02 px，
+front P95 42.05 vs 42.03 px）下的 Table 3 基线行（全 88 序列，canonicalized）：
+
+| 行 | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |
+|---|---:|---:|---:|
+| 论文 canonicalized 基线（评审引用） | 0.969 | 1.664 | — |
+| mean 融合（修正） | 0.971 | 0.564 | 0.111 |
+| median 融合（修正） | 0.971 | 0.560 | 0.112 |
+| best single view（修正） | 0.952 | 0.565 | 0.113 |
+| left / front / right 单视（canonicalized） | 0.961 / 0.987 / — | 0.536 / 0.600 / — | — |
+| 原始相机系单视图（未 canonicalize） | 2.0–2.3 | 0.30–1.00 | 0 |
+| TriPoseFusion 旧 ckpt，fold-0 val（修正） | 0.949 | 0.346 | 0.159 |
+
+- PA > MPJPE 的反常已消除（0.564 < 0.971），LAYQ 大条 ① 有了修正数字。
+- 模型行 0.949 与全序列 mean 融合 0.971 处于同一水平；同协议 fold-0 val 对比见二·五。
+
+伪 GT 生成事实（rebuttal 表述必须与之一致）：
+- 全自动流水线：SAM3D 原始 `pred_keypoints_2d` → best_subset DLT → 40px 剔除，
+  **没有人工修正环节**；与论文 "manually corrected" 表述矛盾，需改为"自动三角化参考
+  ＋质量过滤＋LOO 稳定性指标"。
+- 内参为配置常数；外参由 5 个布局标量经 look-at 构造，**未标定**。
+- 有效点中各视角覆盖率：left 98.4% / right 93.4% / **front 8.1%**（LAYQ 提到的失衡）。
+- **外参优化实验**（`traingulation/calibrate_extrinsics.py`，固定 left、基线软约束、
+  Huber BA 优化 front/right 6DoF，640 留出帧用生产 best_subset 验证）：布局假设朝向
+  偏差 13–23°；优化后 GT 重投影误差均值 8.99→5.19 px（−42%），中位 7.42→3.34，
+  P95 23.78→16.58，有效点 +5.5%，front 利用率 10.2%→40.5%。优化外参存于
+  `traingulation/optimized_extrinsics.json`，尚未用于重生成 GT——可作"GT 稳健性
+  分析"：用优化外参重生成 GT 后重跑关键行，证明结论对 GT 质量不敏感（回应 19jf/xS2o）。
+
 ## 三、rebuttal 各点回应策略
 
 - **A（LAYQ：PA>MPJPE 反常）**：如实说明发现的对齐实现缺陷 + 给修正数字 +
