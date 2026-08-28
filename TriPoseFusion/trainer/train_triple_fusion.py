@@ -13,6 +13,18 @@ from models.keypoint_mlp import TriViewKeypointFusionNet  # For backward compati
 logger = logging.getLogger(__name__)
 
 
+def gate_entropy_loss(alpha: torch.Tensor) -> torch.Tensor:
+    """Uniformity regularizer log(V) - H(alpha), averaged over batch/time/joints.
+
+    alpha: (..., V) softmax gate weights. Returns a non-negative scalar that is
+    zero iff alpha is uniform over the view dimension. alpha must be clamped
+    before the log so near-zero weights keep a finite, non-zero gradient.
+    """
+    entropy = -(alpha * alpha.clamp_min(1e-6).log()).sum(dim=-1)
+    max_entropy = torch.log(torch.tensor(float(alpha.shape[-1]), device=alpha.device))
+    return (max_entropy - entropy).mean()
+
+
 class TriFusionPoseTrainer(LightningModule):
     """Geometry-guided self-supervised multi-view 3D pose fusion trainer."""
 
@@ -169,13 +181,7 @@ class TriFusionPoseTrainer(LightningModule):
         # IMPROVEMENT #2: Gate entropy regularization - encourages uniform view usage
         # This prevents some views from being completely ignored during training
         if self.lambda_gate_entropy > 0:
-            alpha = out["alpha"]  # (B,T,J,V)
-            # Compute entropy: H(α) = -Σ α log(α)
-            entropy = -(alpha * alpha.log().clamp_min(1e-6)).sum(dim=-1)  # (B,T,J)
-            # Normalize by max possible entropy log(V)
-            max_entropy = torch.tensor([torch.log(torch.tensor(self.model.num_views))], device=entropy.device)
-            # Entropy regularization: encourage uniformity (maximize entropy)
-            loss_gate_entropy = (max_entropy - entropy).mean()
+            loss_gate_entropy = gate_entropy_loss(out["alpha"])  # alpha: (B,T,J,V)
         else:
             loss_gate_entropy = pred.new_zeros(())
 

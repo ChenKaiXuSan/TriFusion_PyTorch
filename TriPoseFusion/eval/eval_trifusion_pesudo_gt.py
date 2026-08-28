@@ -224,22 +224,30 @@ def _apply_joint_selection(
 def _procrustes_align(
     pred: torch.Tensor, gt: torch.Tensor, eps: float = 1e-8
 ) -> torch.Tensor:
+    """Least-squares similarity (Umeyama) alignment of pred onto gt.
+
+    Row-vector convention: aligned = s * (pred_c @ R) + gt_mean with
+    R = U diag(1,1,d) Vt from SVD(pred_c.T @ gt_c). The previous
+    implementation applied the transposed rotation (Vt.T @ U.T), which
+    systematically over-estimates PA-MPJPE. Degenerate inputs fall back to
+    translation-only alignment.
+    """
     pred_mean = pred.mean(dim=0, keepdim=True)
     gt_mean = gt.mean(dim=0, keepdim=True)
     pred_center = pred - pred_mean
     gt_center = gt - gt_mean
 
+    var_pred = (pred_center**2).sum()
+    if float(var_pred) < eps or float((gt_center**2).sum()) < eps:
+        return pred_center + gt_mean
+
     cov = pred_center.transpose(0, 1) @ gt_center
     u, s, v_t = torch.linalg.svd(cov, full_matrices=False)
-    r = v_t.transpose(0, 1) @ u.transpose(0, 1)
-
-    if torch.det(r) < 0:
-        v_t = v_t.clone()
-        v_t[-1, :] *= -1
-        r = v_t.transpose(0, 1) @ u.transpose(0, 1)
-
-    var_pred = (pred_center**2).sum().clamp_min(eps)
-    scale = s.sum() / var_pred
+    signs = torch.ones_like(s)
+    if torch.det(u @ v_t) < 0:
+        signs[-1] = -1.0
+    r = (u * signs) @ v_t
+    scale = (s * signs).sum() / var_pred
     aligned = scale * (pred_center @ r) + gt_mean
     return aligned
 

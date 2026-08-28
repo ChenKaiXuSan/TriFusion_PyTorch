@@ -263,29 +263,30 @@ def compute_pa_mpjpe(pred: np.ndarray, gt: np.ndarray, valid_mask: np.ndarray) -
 
 
 def procrustes_align(source: np.ndarray, target: np.ndarray) -> np.ndarray:
-    """将 source 通过相似变换对齐到 target。"""
+    """将 source 通过最小二乘相似变换（Umeyama）对齐到 target。
+
+    行向量约定: aligned = s * (source_c @ R) + target_mean，其中
+    R = U diag(1,1,d) Vt 来自 SVD(source_c.T @ target_c)，
+    s = sum(带符号奇异值) / ||source_c||^2。旧实现使用了转置的旋转矩阵和
+    范数配比 scale，会系统性高估 PA-MPJPE。退化输入退回仅平移对齐。
+    """
     source_mean = np.mean(source, axis=0, keepdims=True)
     target_mean = np.mean(target, axis=0, keepdims=True)
     source_centered = source - source_mean
     target_centered = target - target_mean
-
-    source_norm = np.linalg.norm(source_centered)
-    target_norm = np.linalg.norm(target_centered)
-    if source_norm < 1e-8 or target_norm < 1e-8:
-        return source.copy()
-
-    source_centered /= source_norm
-    target_centered /= target_norm
+    source_var = float(np.sum(source_centered**2))
+    target_norm = float(np.linalg.norm(target_centered))
+    if source_var < 1e-12 or target_norm < 1e-8:
+        return source_centered + target_mean
 
     h = source_centered.T @ target_centered
-    u, _, vt = np.linalg.svd(h)
-    rotation = vt.T @ u.T
-    if np.linalg.det(rotation) < 0:
-        vt[-1, :] *= -1
-        rotation = vt.T @ u.T
-
-    scale = target_norm / source_norm
-    return scale * ((source - source_mean) @ rotation) + target_mean
+    u, s, vt = np.linalg.svd(h)
+    d = np.sign(np.linalg.det(u @ vt))
+    signs = np.ones(s.shape[0])
+    signs[-1] = d if d != 0 else 1.0
+    rotation = (u * signs) @ vt
+    scale = float(np.sum(s * signs)) / source_var
+    return scale * (source_centered @ rotation) + target_mean
 
 
 def analyze_subject(

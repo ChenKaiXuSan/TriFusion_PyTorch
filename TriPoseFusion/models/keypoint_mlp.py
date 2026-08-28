@@ -298,21 +298,33 @@ class RobustCanonicalization(nn.Module):
         # Compute shoulder distance and detect outliers
         shoulder_dist = torch.linalg.norm(left_shoulder - right_shoulder, dim=-1, keepdim=True)
         shoulder_outlier = (shoulder_dist < self.eps) | (shoulder_dist > 2 * self.shoulder_prior)
+        valid = ~shoulder_outlier.squeeze(-1).squeeze(-1)  # (B,T)
 
-        # Use midpoint between shoulders if outlier detected (fallback to neck-centered frame)
-        left_valid = torch.where(shoulder_outlier, neck, left_shoulder)
-        right_valid = torch.where(shoulder_outlier, neck, right_shoulder)
-
-        # Compute x-axis from valid shoulder positions
-        x_axis_raw = (right_valid - left_valid).squeeze(2)
+        # Fallback for outlier frames: reuse the shoulder axis of the temporally
+        # nearest valid frame in the same clip (forward fill, then the first valid
+        # frame for a leading invalid prefix). Replacing both shoulders with the
+        # neck would yield a zero x-axis and collapse the rotation to zero.
+        x_axis_raw = (right_shoulder - left_shoulder).squeeze(2)  # (B,T,3)
+        shoulder_mid = 0.5 * (left_shoulder + right_shoulder).squeeze(2)  # (B,T,3)
+        if not bool(valid.all()):
+            idx = torch.arange(T, device=pose.device).expand(B, T)
+            ffill_idx = torch.cummax(torch.where(valid, idx, idx.new_full((), -1)), dim=1).values
+            first_valid = torch.argmax(valid.int(), dim=1, keepdim=True)  # 0 if none valid
+            fallback_idx = torch.where(ffill_idx >= 0, ffill_idx, first_valid).clamp_min(0)
+            gather_idx = fallback_idx.unsqueeze(-1).expand(-1, -1, 3)
+            x_axis_raw = torch.where(valid.unsqueeze(-1), x_axis_raw, x_axis_raw.gather(1, gather_idx))
+            shoulder_mid = torch.where(valid.unsqueeze(-1), shoulder_mid, shoulder_mid.gather(1, gather_idx))
+            # Clips with no valid frame at all: default lateral unit axis.
+            has_valid = valid.any(dim=1).view(B, 1, 1)
+            default_axis = torch.zeros_like(x_axis_raw)
+            default_axis[..., 0] = 1.0
+            x_axis_raw = torch.where(has_valid, x_axis_raw, default_axis)
         x_axis = F.normalize(x_axis_raw, dim=-1, eps=self.eps)
 
         # Compute y-axis (downward direction)
         if mid_hip is not None:
             down_raw = mid_hip.squeeze(2) - neck.squeeze(2)
         else:
-            shoulder_mid = 0.5 * (left_valid + right_valid)
-            shoulder_mid = shoulder_mid.squeeze(2)
             down_raw = shoulder_mid - neck.squeeze(2)
 
         # Clip extreme values to prevent numerical instability
@@ -320,8 +332,15 @@ class RobustCanonicalization(nn.Module):
         down_norm = torch.clip(down_norm, min=self.eps, max=1.0)
         down_axis = down_raw / down_norm
 
-        # Compute z-axis (orthogonal to body plane)
-        z_axis = F.normalize(torch.cross(x_axis, down_axis, dim=-1), dim=-1, eps=self.eps)
+        # Compute z-axis (orthogonal to body plane). If the shoulder and torso
+        # axes are (near-)parallel the cross product degenerates; fall back to a
+        # fixed reference so the rotation matrix always has full rank.
+        z_raw = torch.cross(x_axis, down_axis, dim=-1)
+        ref_z = torch.cross(x_axis, x_axis.new_tensor([0.0, 0.0, 1.0]).expand_as(x_axis), dim=-1)
+        ref_y = torch.cross(x_axis, x_axis.new_tensor([0.0, 1.0, 0.0]).expand_as(x_axis), dim=-1)
+        ref = torch.where(torch.linalg.norm(ref_z, dim=-1, keepdim=True) > self.eps, ref_z, ref_y)
+        z_raw = torch.where(torch.linalg.norm(z_raw, dim=-1, keepdim=True) > self.eps, z_raw, ref)
+        z_axis = F.normalize(z_raw, dim=-1, eps=self.eps)
         y_axis = F.normalize(torch.cross(z_axis, x_axis, dim=-1), dim=-1, eps=self.eps)
 
         # Build rotation matrix and apply to all joints

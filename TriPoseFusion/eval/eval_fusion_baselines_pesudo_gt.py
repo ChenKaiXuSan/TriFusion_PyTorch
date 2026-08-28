@@ -269,15 +269,42 @@ def canonicalize_pose(
     neck = pose[:, neck_index : neck_index + 1]
     left = pose[:, left_shoulder_index]
     right = pose[:, right_shoulder_index]
-    x_axis = normalize(left - right, eps)
+
+    # Same axis convention as the model-side RobustCanonicalization: x = right - left.
+    x_raw = right - left
+    shoulder_mid = 0.5 * (left + right)
+    shoulder_dist = np.linalg.norm(x_raw, axis=-1)
+    shoulder_prior = 0.5  # average shoulder width in meters
+    valid = np.isfinite(shoulder_dist) & (shoulder_dist > eps) & (shoulder_dist < 2 * shoulder_prior)
+    if not valid.all():
+        # Degenerate/outlier frames reuse the axis of the temporally nearest
+        # valid frame (forward fill; the first valid frame for a leading
+        # invalid prefix). A zero shoulder vector would otherwise collapse the
+        # rotation matrix to zero and the canonicalized pose to the origin.
+        if valid.any():
+            idx = np.arange(pose.shape[0])
+            ffill = np.maximum.accumulate(np.where(valid, idx, -1))
+            fallback = np.where(ffill >= 0, ffill, int(np.argmax(valid)))
+            x_raw = np.where(valid[:, None], x_raw, x_raw[fallback])
+            shoulder_mid = np.where(valid[:, None], shoulder_mid, shoulder_mid[fallback])
+        else:
+            x_raw = np.tile(np.array([1.0, 0.0, 0.0], dtype=np.float64), (pose.shape[0], 1))
+    x_axis = normalize(x_raw, eps)
 
     if 0 <= mid_hip_index < pose.shape[1]:
         down = pose[:, mid_hip_index] - neck[:, 0]
     else:
-        down = 0.5 * (left + right) - neck[:, 0]
+        down = shoulder_mid - neck[:, 0]
     down_axis = normalize(down, eps)
 
-    z_axis = normalize(np.cross(x_axis, down_axis), eps)
+    # Guard the cross product against x_axis (near-)parallel to down_axis so the
+    # rotation always has full rank.
+    z_raw = np.cross(x_axis, down_axis)
+    ref_z = np.cross(x_axis, np.array([0.0, 0.0, 1.0]))
+    ref_y = np.cross(x_axis, np.array([0.0, 1.0, 0.0]))
+    ref = np.where(np.linalg.norm(ref_z, axis=-1, keepdims=True) > eps, ref_z, ref_y)
+    z_raw = np.where(np.linalg.norm(z_raw, axis=-1, keepdims=True) > eps, z_raw, ref)
+    z_axis = normalize(z_raw, eps)
     y_axis = normalize(np.cross(z_axis, x_axis), eps)
     rot = np.stack([x_axis, y_axis, z_axis], axis=-1)
     return np.einsum("tjc,tcd->tjd", pose - neck, rot).astype(np.float32)
@@ -298,25 +325,32 @@ def fuse_views(view_pose: np.ndarray, view_conf: np.ndarray, method: str, eps: f
 
 
 def procrustes_align(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """Least-squares similarity (Umeyama) alignment of source onto target.
+
+    Row-vector convention: aligned = s * (source_c @ R) + target_mean with
+    R = U diag(1,1,d) Vt from SVD(source_c.T @ target_c) and the LS-optimal
+    scale s = sum(d-corrected singular values) / ||source_c||^2. The previous
+    implementation applied the transposed rotation and a norm-ratio scale,
+    which systematically over-estimates PA-MPJPE (it can even exceed MPJPE).
+    Degenerate inputs fall back to translation-only alignment.
+    """
     source_mean = np.mean(source, axis=0, keepdims=True)
     target_mean = np.mean(target, axis=0, keepdims=True)
     source_centered = source - source_mean
     target_centered = target - target_mean
-    source_norm = np.linalg.norm(source_centered)
-    target_norm = np.linalg.norm(target_centered)
-    if source_norm < 1e-8 or target_norm < 1e-8:
-        return source.copy()
+    source_var = float(np.sum(source_centered**2))
+    target_norm = float(np.linalg.norm(target_centered))
+    if source_var < 1e-12 or target_norm < 1e-8:
+        return source_centered + target_mean
 
-    source_centered /= source_norm
-    target_centered /= target_norm
     h = source_centered.T @ target_centered
-    u, _, vt = np.linalg.svd(h)
-    rotation = vt.T @ u.T
-    if np.linalg.det(rotation) < 0:
-        vt[-1, :] *= -1
-        rotation = vt.T @ u.T
-    scale = target_norm / source_norm
-    return scale * ((source - source_mean) @ rotation) + target_mean
+    u, s, vt = np.linalg.svd(h)
+    d = np.sign(np.linalg.det(u @ vt))
+    signs = np.ones(s.shape[0])
+    signs[-1] = d if d != 0 else 1.0
+    rotation = (u * signs) @ vt
+    scale = float(np.sum(s * signs)) / source_var
+    return scale * (source_centered @ rotation) + target_mean
 
 
 def compute_metrics(
@@ -346,12 +380,14 @@ def compute_metrics(
     root_values = root_dist[root_valid]
 
     pa_values = []
+    pa_frame_raw_values = []  # unaligned errors on exactly the PA point set (same-mask protocol)
     for frame_idx in range(n_frames):
         frame_valid = valid[frame_idx]
         if int(frame_valid.sum()) < 3:
             continue
         aligned = procrustes_align(pred[frame_idx, frame_valid], gt[frame_idx, frame_valid])
         pa_values.extend(np.linalg.norm(aligned - gt[frame_idx, frame_valid], axis=-1).tolist())
+        pa_frame_raw_values.extend(dist[frame_idx, frame_valid].tolist())
 
     pck = {
         f"{threshold:.2f}": float(np.mean(valid_dist <= threshold))
@@ -373,6 +409,7 @@ def compute_metrics(
         "median_error_m": float(np.median(valid_dist)),
         "root_mpjpe_m": float(np.mean(root_values)) if root_values.size else None,
         "pa_mpjpe_m": float(np.mean(pa_values)) if pa_values else None,
+        "mpjpe_pa_frames_m": float(np.mean(pa_frame_raw_values)) if pa_frame_raw_values else None,
         "pck": pck,
         "auc_0.15": auc,
         "per_axis_mae_m": {
@@ -501,7 +538,7 @@ def summarize(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     for row in rows:
         method = row["method"]
         env = row["environment_name"]
-        for metric in ("mpjpe_m", "median_error_m", "root_mpjpe_m", "pa_mpjpe_m", "auc_0.15", "pck_0.05", "pck_0.10", "pck_0.15"):
+        for metric in ("mpjpe_m", "median_error_m", "root_mpjpe_m", "pa_mpjpe_m", "mpjpe_pa_frames_m", "auc_0.15", "pck_0.05", "pck_0.10", "pck_0.15"):
             value = safe_float(row.get(metric))
             if value is None:
                 continue
