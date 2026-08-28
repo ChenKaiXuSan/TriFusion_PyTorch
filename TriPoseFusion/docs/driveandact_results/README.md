@@ -86,3 +86,38 @@ SOTA 报告的 MPJPE **严格同口径**；**canonical** 列与上表协议相�
   而非形状。该基线依赖精确标定，论文场景（无标定、杆载/车载自由布局）不可用，
   这正是免标定关键点融合的设计动机。
 - 去掉任一视角误差上升 10–40%（front+right 最差 45.5 mm），说明三视角冗余有实际贡献。
+
+## TriPoseFusion checkpoint 零样本评测（30 fps 密集片段）
+
+脚本 `eval/eval_driveandact_model.py`，数字见 `driveandact_model_full.json` /
+`driveandact_model_robust_canon.json`。模型按训练同样的 **16 帧连续 30 fps 窗口**推理，
+数据为同 6 个 run 各 3 段 × 20 s 连续片段（`tripose_eval_dense/`，32,400 帧，
+SAM3D 检出 32,399），共 665 个窗口 / 10,640 帧。checkpoint 为论文原始（修复前代码）
+fold-0 权重，**未在 Drive&Act 上训练或微调**。
+
+关节协议 **hs10**：模型输出为 52 关节（无肘/髋），与 BODY-25 的公共集为
+nose, 2 eye, 2 ear, 2 shoulder, 2 wrist, neck（预测侧 neck 取双肩中点）。GT 无髋无法
+对齐到模型 canonical 系，故主指标 PA-MPJPE，另报刚性对齐（旋转+平移、无尺度）MPJPE。
+基线在模型自身 `_canonicalize_pose` 系内计算，与模型完全同协议。
+
+| 方法（hs10，mm） | PA-MPJPE | rigid-MPJPE |
+|---|---|---|
+| **TriPoseFusion full（零样本）** | **23.7** | 32.5 |
+| TriPoseFusion robust_canon（零样本） | 24.7 | 33.8 |
+| canonicalize + mean 融合（免训练） | 23.1 | 31.6 |
+| single front | 26.9 | 34.2 |
+| single left | 31.9 | 45.0 |
+| single right | 24.0 | 29.0 |
+
+按 run（full 模型 PA）：vp11 19.8 / 21.8 · vp13 23.5 / 26.5 · vp5 26.4 / 24.1 mm。
+
+要点（如实）：
+- **零样本迁移成立**：未见过 Drive&Act 的模型在官方 test 受试者上 PA-MPJPE 23.7 mm，
+  优于任一单视角（最佳 24.0 mm），与评审引用的全监督 SOTA 区间（22.6–30.4 mm）同量级。
+- **学习模块相对免训练 canonicalize+mean 融合没有增益**（23.7 vs 23.1 mm）——与论文
+  消融（uniform_gate 最优）及评审判断一致：canonicalization 是有效成分。
+- **门控塌缩在 Drive&Act 上复现**：两个 ckpt 的逐视角 alpha 均值均为 0.3333/0.3333/0.3333。
+  这是修复前的权重（熵正则零梯度），重训（λ_gate 修复版）完成后可用同一脚本
+  约 10 分钟内重评。
+- hs10 的 PA 低于 body14 的 PA（23 vs 31 mm）是因为 hs10 不含肘/髋这两类难关节，
+  两表数字不可直接互比。
