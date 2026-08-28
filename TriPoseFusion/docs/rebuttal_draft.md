@@ -70,11 +70,38 @@ PA-MPJPE 0.062 m，PA < MPJPE 反常消失——归因于上述三处修复本�
   | median + smooth (w5) | 0.971 | 0.559 | 0.112 |
   | fuse confidence | = mean（SAM3D 输出无逐关节置信度，退化为均匀权重；正文须注明或删行） |
 
-  **PA < MPJPE 反常在所有行消失。** 主模型（旧 ckpt，fold0 val 16 序列）
-  MPJPE 0.949 / PA 0.346 / PCK@0.10 0.159——相对基线 PA **−38%**，MPJPE −2%。
-  ⚠️ 口径：基线是 88 序列均值、模型是 fold0 val 子集，另一会话正在做同子集
-  对照（`corrected_fold0_val_comparison.json`）【待填:同子集对照数字】，
-  论文表格必须用同子集数字。
+  **PA < MPJPE 反常在所有行消失。**
+
+- **同子集对照（fold-0 val 20 序列，修正管线，旧 ckpt；
+  `corrected_fold0_val_comparison.json`）——这是论文 Table 3 应采用的口径：**
+
+  | 方法 | MPJPE | PA-MPJPE | PCK@0.10 |
+  |---|---|---|---|
+  | single front | 1.087 | 0.381 | 0.120 |
+  | single left | 1.057 | **0.350** | 0.113 |
+  | single right | 1.081 | 0.356 | 0.105 |
+  | best single | 1.040 | 0.376 | 0.110 |
+  | fuse mean (= confidence) | 1.072 | 0.362 | 0.114 |
+  | fuse median | 1.076 | 0.361 | 0.115 |
+  | median + smooth (w5) | 1.076 | 0.361 | 0.115 |
+  | **TriPoseFusion（旧 ckpt 0-0.80）** | **0.994** | 0.367 | **0.149** |
+
+  ⚠️ **核心结论（必须如实写入 rebuttal）**：修正管线下，旧 checkpoint 的模型
+  相对最佳基线仅 MPJPE −4.4%、PCK@0.10 +30%（相对），PA-MPJPE **持平**
+  （0.367 vs 0.350）。论文 Table 3 的大幅领先是三处 bug（尤其 canonicalize
+  塌缩同时作用于 GT 与预测）造成的假象。因此：
+  1. 旧 ckpt 是用带 bug 的 canonicalizer 训练的，与修正评估存在训练/评估
+     错配；**Pegasus 5 个修正重训（955575–79）的结果是 A 点主表的唯一
+     依据**，rebuttal 主张的强弱取决于它们。
+  2. 重训结果出来前，措辞保守为"MPJPE/PCK 小幅改善、PA 持平"，不再写
+     "显著优于"。
+  3. PCK 明显改善说明模型在"对得准的关节"上更好——配合 per-joint 躯干/手部
+     分解（D 点）：若躯干关节差距更大，仍是可辩护的贡献。
+  4. 若重训后优势仍小，则诚实收窄贡献为：canonicalization 协议 + 轻量融合
+     + 手部关节鲁棒性（PCK）+ 公开集零样本评测（I 点），并主动承认 Table 3
+     原数字错误。
+  （口径细节：基线为逐帧-逐序列均值，模型为逐片段-逐序列均值，帧覆盖略异，
+  不改变结论。fold_0.json 实为 train 68 / val 20 序列。）
 - **主结果（full 模型，旧 ckpt + 修正评估，fold0 val）：MPJPE 0.949 /
   PA-MPJPE 0.346**（论文原 0.412 / 0.275）。⚠️ 方向与直觉相反：旧
   canonicalization 塌缩 bug 使 GT 与预测同时塌缩到原点，**人为压低**了论文
