@@ -102,6 +102,27 @@ PA-MPJPE 0.062 m，PA < MPJPE 反常消失——归因于上述三处修复本�
      原数字错误。
   （口径细节：基线为逐帧-逐序列均值，模型为逐片段-逐序列均值，帧覆盖略异，
   不改变结论。fold_0.json 实为 train 68 / val 20 序列。）
+
+- **修正代码重训（Pegasus 955575–79）的 ckpt 修正评估（fold-0 val，
+  eval_trifusion_pesudo_gt 聚合口径；`eval/logs/ckpt_sweep_full`、`ckpt_sweep_ablation`）：**
+
+  | 配置 / ckpt | MPJPE | PA-MPJPE |
+  |---|---|---|
+  | full — epoch 0 / epoch 1 / 最后 epoch | 0.9488 / 0.9481 / 0.9481 | 0.346 |
+  | base_simple（无 robust canon、无 TCN、无多尺度速度） | 0.9478 | 0.346 |
+  | uniform_gate | 0.9488 | 0.346 |
+  | no_cross_view_attention | 0.9487 | 0.346 |
+  | full_gate_lambda0 | 【待填】 | |
+  | （旧 ckpt，同口径） | 0.949 | 0.346 |
+
+  **结论：架构开关与 epoch 均无关，所有配置收敛到同一解（≈ 中位数融合）。**
+  论文 Table 4 "robust canonicalization 0.846 → 0.412（−51%）"确认为 bug 3
+  的塌缩假象（不可靠帧 GT 与预测同时归零）；修正后 canonicalization 的
+  **评估侧**贡献（raw 2.08 → canonicalized ~1.0）仍然成立，但作为**模型模块**
+  的消融增益不存在。根因见 C 点第 4 条（训练目标的平凡解）。
+  rebuttal 写法：撤回 Table 4 的模块增益主张；Table 3/4 改为修正数字；
+  贡献重述为"鲁棒 canonicalization 协议 + 轻量融合（≈固定融合）+ 公开集验证"，
+  除非留一视角目标（C 点第 4 条）的重训明显改善。
 - **主结果（full 模型，旧 ckpt + 修正评估，fold0 val）：MPJPE 0.949 /
   PA-MPJPE 0.346**（论文原 0.412 / 0.275）。⚠️ 方向与直觉相反：旧
   canonicalization 塌缩 bug 使 GT 与预测同时塌缩到原点，**人为压低**了论文
@@ -182,6 +203,17 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
    若 gate 仍趋均匀，我们将把主张收窄为 "canonicalization + uniform fusion"
    （注：ablation 中 uniform_gate 本就为最优 0.7891，方法的主要贡献不依赖
    adaptive gating 成立）。
+4. **根因与修正方向（训练目标审计，2026-08-28 晚）**：论文 3.7 的自监督目标
+   以三视角中位数为 $\mathcal{L}_{tri}$ 的 teacher，view/bone/temp 亦为自洽项——
+   **均匀融合即全局最优**；训练日志显示 val/loss 的 99% 是 InfoNCE（0.1×7.8），
+   几何项自 epoch 0 起 ≈0 且不变。因此 gate 均匀不是熵正则所致（该项梯度为零），
+   而是目标函数的最优解；论文 3.5 节"entropy regularization keeps the average
+   weights close to uniform"的解释需改写。已实现**留一视角（leave-one-view-out）
+   自监督 teacher**：训练时随机屏蔽一个视角（特征置零 + attention mask + gate=0），
+   $\mathcal{L}_{tri}$ 目标改为该视角的 canonical 观测——无平凡解、且给 gate
+   分化提供梯度；配 λ_nce=0.01、λ_gate=0、按 val/loo_mpjpe 选 ckpt。
+   仍是自监督、不使用伪 GT。结果：【待填:c_loo 957197 vs c_looctl 957198
+   的修正 MPJPE/PA、gate 分布、遮挡压力测试】。
 3. **旁证（E 点学习型基线）**：在完全相同的 keypoint 输入上，一个 1.9K 参数、
    仅用跨视角几何一致性特征的融合器学出了明显非均匀的视角权重
    （front 0.41 / left 0.32 / right 0.27）并因此优于固定融合——说明**自适应
