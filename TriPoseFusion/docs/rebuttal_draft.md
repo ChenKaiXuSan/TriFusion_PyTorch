@@ -261,10 +261,20 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
    /架构层面的问题，而非"数据不支持自适应加权"。这也正是 λ_gate=0 重训
    （c_lam0）要验证的。
 
-   初步观察（旧 checkpoint，zero 遮挡，冒烟规模 2 batch/条件）：任一视角被
-   置零后 gate 权重仍精确保持 1/3 均匀（含被遮挡视角），MPJPE 由 0.325 升至
-   0.379–0.393——直接证实旧模型 gate 已塌缩且对输入质量无响应，作为重训
-   前后的 "before" 对照。正式数字以全量验证集 + 重训 ckpt 为准。
+   **全量压力测试（修正代码重训 full ckpt，fold-0 val 9,658 片段，单视角置零；
+   `TriFusion_fast/logs/occlusion_stress_cfull/`）：**
+
+   | 条件 | MPJPE | PA-MPJPE | gate front/left/right | 被置零视角的 gate |
+   |---|---|---|---|---|
+   | clean | 0.9487 | 0.3459 | 0.333/0.333/0.333 | – |
+   | zero front | 1.0048 (+5.9%) | 0.3329 | 0.333/0.333/0.333 | 0.333 |
+   | zero left | 1.0215 (+7.7%) | 0.3501 | 0.333/0.333/0.333 | 0.333 |
+   | zero right | 1.0169 (+7.2%) | 0.3482 | 0.333/0.333/0.333 | 0.333 |
+
+   即：视角被整体置零时误差上升 6–8%，而 gate 对被破坏的视角仍分配精确的
+   1/3 权重——xS2o "forcibly inject 33.33% of corrupted geometry" 的推断在
+   修正代码重训后仍成立，且与熵正则无关（该 run 与 λ_gate=0 的 run 行为相同）。
+   这是 C 点的 "before" 正式数据；LOO teacher 重训（c_loo）出来后用同一测试对照。
 
 ### D. "绝对误差 0.412 m vs SOTA 22–30 mm" — 不可直接比较
 
