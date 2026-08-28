@@ -460,19 +460,10 @@ def evaluate_subject_env(
     gt_pose = gt_pose[gt_indices]
     gt_valid = gt_valid[gt_indices]
 
-    # SAM3D/GT arrays are in the 70-joint layout, but the canonicalization
-    # anchors (neck=51, shoulders=5/6) and the model rows use the 52-joint
-    # model space. Select KEEP_KEYPOINT_INDICES first so joint sets and
-    # anchor indices are consistent (in the raw 70-joint layout, index 51 is
-    # a left-hand finger joint that is NaN in ~80% of GT frames).
-    keep = np.asarray(KEEP_KEYPOINT_INDICES, dtype=np.int64)
-    if view_pose.shape[1] > keep.max() and view_pose.shape[1] != keep.size:
-        view_pose = view_pose[:, keep]
-        view_conf = view_conf[:, keep]
-    if gt_pose.shape[1] > keep.max() and gt_pose.shape[1] != keep.size:
-        gt_pose = gt_pose[:, keep]
-        gt_valid = gt_valid[:, keep]
-
+    # 注意：load_sam3d_frame / load_gt_sequence 已把 70 关节原始布局按
+    # KEEP_KEYPOINT_INDICES 映射到 52 关节模型空间，此处数组即 52 关节，
+    # canonicalize 的锚点 (neck=51, shoulders=5/6) 因此是正确的。
+    # 不要在这里再做 KEEP 切片（会二次映射）。
     n_joints = min(view_pose.shape[1], gt_pose.shape[1])
     view_pose = view_pose[:, :n_joints]
     view_conf = view_conf[:, :n_joints]

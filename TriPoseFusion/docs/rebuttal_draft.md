@@ -37,15 +37,14 @@ reported where available. 【待填:哪些表格行已换新数字】
 （注：三个修复均有数值回归测试；合成数据上修复后的 PA 误差回到噪声水平
 0.04–0.05，旧实现为 0.7–2.4。）
 
-**第四处缺陷（2026-08-28 下午新发现，同样在修正数字中修复）**：Table 3 的
-融合/平滑基线脚本在 70 关节原始布局上直接用 52 关节模型空间的锚点索引做
-canonicalize——70 布局中"neck=51"实际是左手指关节（伪 GT 中 ~81% 帧为 NaN），
-导致 canonicalized 基线的 GT 大部分帧整帧 NaN、canonical 坐标系原点/躯干轴
-挂在手指上；且基线在 70 关节全集上评估而模型行在 52 关节子集上，关节集
-不一致。修复：基线统一先按 KEEP 索引映射到 52 关节模型空间（与
-eval_single_sam3d 及模型行一致），此后所有锚点索引正确。单序列验证：修复后
-canonicalized 融合基线 MPJPE 0.304 m / PA-MPJPE 0.062 m（PA < MPJPE，反常
-彻底消失）。新增 3 个回归测试（tests/test_joint_space_alignment.py）。
+**关节空间审计（2026-08-28 下午，结论：无第四缺陷）**：曾怀疑基线在 70 关节
+原始布局上误用 52 空间锚点（70 布局的 51 号是手指关节）。经跨会话交叉核实，
+load_sam3d_frame / load_gt_sequence 在加载时即按 KEEP 做 70→52 映射，锚点
+(neck=51, shoulders=5/6) 在映射后的模型空间中完全正确，基线与模型行关节集
+一致——**该怀疑不成立**。已将此前提固化为 4 个守卫测试
+（tests/test_joint_space_alignment.py，防止未来移除加载器 KEEP 或二次映射）。
+修复后代码的单序列快检（01/夜多い）：canonicalized 融合基线 MPJPE 0.304 m /
+PA-MPJPE 0.062 m，PA < MPJPE 反常消失——归因于上述三处修复本身。
 
 ---
 
@@ -56,12 +55,17 @@ canonicalized 融合基线 MPJPE 0.304 m / PA-MPJPE 0.062 m（PA < MPJPE，反�
 上面的共同说明 + 具体数字：
 
 - 旧 Table 3 canonicalized 基线：MPJPE 0.969 / PA-MPJPE 1.664（异常来源 =
-  转置旋转 + 非最优 scale + 塌缩帧 + **70/52 关节空间错位**——见共同说明的
-  第四处缺陷：canonicalize 以手指关节为原点且 81% GT 帧整帧 NaN）。
-- 修正后：MPJPE 【待填:corrected_fusion_baselines_jointfix】 / PA-MPJPE 【待填】
-  （单序列验证 0.304 / 0.062，全量运行中）。
-- 主结果（full 模型）修正后 PA-MPJPE：【待填:corrected_trifusion_full】
-  （原 0.275 m，仅会下降）。
+  转置旋转 + 非最优 scale + 塌缩帧）。
+- 修正后基线：MPJPE 【待填:corrected_fusion_baselines】 / PA-MPJPE 【待填】
+  （单序列快检 0.304 / 0.062，全量运行中）。
+- **主结果（full 模型，旧 ckpt + 修正评估，fold0 val）：MPJPE 0.949 /
+  PA-MPJPE 0.346**（论文原 0.412 / 0.275）。⚠️ 方向与直觉相反：旧
+  canonicalization 塌缩 bug 使 GT 与预测同时塌缩到原点，**人为压低**了论文
+  数字；修正后模型行数字变差。rebuttal 必须如实呈现，并把论证重心放在
+  (i) 相对单视角 SAM3D 起点的改善幅度（同口径修正后重算）、(ii) 重训后
+  的数字（修正代码训练的 ckpt 预计显著优于"旧 ckpt+新评估"的错配组合，
+  因为 canonicalizer 行为已改变）、(iii) per-joint 分解。全 fold 汇总
+  【待填:corrected_trifusion_full 其余 fold】。
 - 新增与 PA-MPJPE 完全同掩码的 `mpjpe_pa_frames` 指标，排除 mask/聚合协议差异
   的解释（回应"aggregation protocol"疑问）。
 
@@ -209,9 +213,8 @@ embedding → 小型 MLP 逐关节视角权重 → softmax（掩掉无效视角�
 
 | 占位符 | 来源 | 状态（2026-08-28） |
 |---|---|---|
-| corrected Table 3 融合/平滑基线行 | eval_fusion_baselines / eval_additional_baselines（含关节空间修复，输出 `*_jointfix`） | 本机运行中（15:45 重启，旧 15:01 两个 run 因关节空间 bug 作废） |
-| corrected Table 3 单视角行 | eval_single_sam3d（该脚本本就应用 KEEP，不受关节空间 bug 影响） | 本机运行中 |
-| corrected full 模型 PA-MPJPE | eval_trifusion_pesudo_gt + 旧 ckpt | 本机运行中 |
+| corrected Table 3 各行 | eval_fusion_baselines / eval_single_sam3d / eval_additional_baselines（修正代码，另一会话 15:01 启动的 run 经审计确认有效） | 本机运行中 |
+| corrected full 模型（fold0 val） | eval_trifusion_pesudo_gt + 旧 ckpt | **已出**：MPJPE 0.949 / PA 0.346 / gate 0.3333 均匀 |
 | per-joint 分解（D/F） | 上述 corrected 评估的 per_joint_mpjpe 输出 | 随评估产出 |
 | c_lam0 gate 分布（C） | Pegasus job 955579 | 排队中 |
 | 重训 ablation（Table 4） | Pegasus jobs 955575–955578 | 排队中 |

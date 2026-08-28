@@ -18,7 +18,6 @@ if str(SCRIPT_DIR) not in sys.path:
 from eval_fusion_baselines_pesudo_gt import (  # noqa: E402
     CAMERAS,
     ENV_NAMES,
-    KEEP_KEYPOINT_INDICES,
     canonicalize_pose,
     compute_metrics,
     fuse_views,
@@ -163,16 +162,8 @@ def evaluate_subject_env(
     gt_pose = gt_pose[gt_indices]
     gt_valid = gt_valid[gt_indices]
 
-    # 70 关节布局 → 52 模型空间（与 eval_single_sam3d 一致），保证
-    # canonicalize 的 neck=51 锚点与模型行的关节集一致。
-    keep = np.asarray(KEEP_KEYPOINT_INDICES, dtype=np.int64)
-    if view_pose.shape[1] > keep.max() and view_pose.shape[1] != keep.size:
-        view_pose = view_pose[:, keep]
-        view_conf = view_conf[:, keep]
-    if gt_pose.shape[1] > keep.max() and gt_pose.shape[1] != keep.size:
-        gt_pose = gt_pose[:, keep]
-        gt_valid = gt_valid[:, keep]
-
+    # 注意：上游加载器已做 KEEP 70→52 映射，这里已是 52 关节模型空间，
+    # canonicalize 锚点正确；不要重复做 KEEP 切片。
     n_joints = min(view_pose.shape[1], gt_pose.shape[1])
     view_pose = view_pose[:, :n_joints]
     view_conf = view_conf[:, :n_joints]
