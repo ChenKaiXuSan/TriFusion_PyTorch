@@ -16,6 +16,7 @@ import torch
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import (
+    EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
     RichModelSummary,
@@ -138,19 +139,27 @@ def train_one_fold(
         save_top_k=2,
     )
 
+    callbacks = [
+        RichProgressBar(leave=True),
+        RichModelSummary(max_depth=3),
+        checkpoint,
+        LearningRateMonitor(logging_interval="step"),
+    ]
+    # val/loss 通常在 epoch 0-1 即最优，patience>0 时提前终止以免空跑到 max_epochs
+    early_stop_patience = int(hparams.train.get("early_stop_patience", 0) or 0)
+    if early_stop_patience > 0:
+        callbacks.append(
+            EarlyStopping(monitor="val/loss", mode="min", patience=early_stop_patience)
+        )
+
     trainer = Trainer(
         devices=str(hparams.train.devices),
         accelerator="gpu",
         strategy="auto",
         max_epochs=hparams.train.max_epochs,
         logger=[tb_logger, csv_logger],
-        check_val_every_n_epoch=1,
-        callbacks=[
-            RichProgressBar(leave=True),
-            RichModelSummary(max_depth=3),
-            checkpoint,
-            LearningRateMonitor(logging_interval="step"),
-        ],
+        check_val_every_n_epoch=int(hparams.train.get("check_val_every_n_epoch", 1) or 1),
+        callbacks=callbacks,
     )
 
     trainer.fit(module, data_module)
