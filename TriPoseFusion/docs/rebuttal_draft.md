@@ -103,6 +103,40 @@ PA-MPJPE 0.062 m，PA < MPJPE 反常消失——归因于上述三处修复本�
   （口径细节：基线为逐帧-逐序列均值，模型为逐片段-逐序列均值，帧覆盖略异，
   不改变结论。fold_0.json 实为 train 68 / val 20 序列。）
 
+- **★ Table 3 统一口径定稿表（2026-08-28 23:44，`eval_table3_unified.py`，
+  GPU 作业 957244；fold-0 val 20 序列；所有行走 eval_trifusion 同一度量路径：
+  模型端 robust canonicalizer 处理 GT、同掩码、同 Procrustes；逐序列均值口径）：**
+
+  | 方法 | MPJPE | PA-MPJPE | MPJPE(PA 同掩码) | PCK@0.10 |
+  |---|---|---|---|---|
+  | single front | 1.0308 | 0.3826 | 1.0308 | 0.156 |
+  | single left | **0.9707** | **0.3628** | 0.9707 | 0.148 |
+  | single right | 0.9897 | 0.3648 | 0.9897 | 0.137 |
+  | best single (oracle) | 0.9695 | 0.3666 | 0.9695 | 0.142 |
+  | fuse mean (= uniform gate) | 0.9945 | 0.3695 | 0.9945 | 0.149 |
+  | fuse median | 0.9907 | 0.3690 | 0.9907 | 0.149 |
+  | TriPoseFusion（自监督，论文方法） | 0.9935 | 0.3675 | 0.9935 | 0.149 |
+  | learned fusion baseline（1.9K，**伪 GT 监督**） | 0.8561 | 0.3280 | 0.8561 | **0.202** |
+
+  fold 级聚合 + 关节分组（head / 肩颈 / body / hands）：single left 0.413/0.269/0.341/1.537；
+  mean 0.415/0.265/0.340/1.582；TriPoseFusion 0.414/0.265/0.340/1.580；
+  learned 0.325/0.237/0.281/1.351。完整数字 `TriFusion_fast/logs/table3_unified_fold0/table3_unified.json`。
+
+  **同协议下的事实（rebuttal 与修订稿必须据此改写）：**
+  1. `mpjpe_pa_frames ≡ mpjpe`（所有行）：PA 与 MPJPE 掩码完全相同——LAYQ 的 mask
+     质疑正式关闭。
+  2. TriPoseFusion（0.9935 / 0.3675）与均值融合（0.9945 / 0.3695）、中位数（0.9907 /
+     0.3690）无差异；且**不优于最佳单视角**（single left 0.9707 / 0.3628）。在本数据集
+     上，canonicalize 后的三视角融合本身没有相对最佳单视角的 MPJPE 增益（Drive&Act
+     上融合优于最佳单视角 8–13% PA，见 I 点——两处结论要并列如实写）。
+  3. 1.9K 参数、以伪 GT 为监督的关键点级融合基线达到 0.8561 / 0.3280 / PCK 0.202
+     （相对论文方法 −14% / −11% / +35%）：说明同一输入下存在显著可学余量，而当前
+     自监督目标（中位数 teacher）没有触及它。该行须明确标注"pseudo-GT supervised"，
+     与论文"训练不用伪 GT"的设定不同，仅作 headroom 参考。
+  4. 论文 Table 3 的定稿：用本表替换；raw 单视角行（2.08 m）单列并标注
+     "raw camera frame, no canonicalization"；88 序列 numpy 路径数字仅作脚注参考并
+     注明两套 canonicalize 实现的手部差异（~0.23 m）。
+
 - **修正代码重训（Pegasus 955575–79）的 ckpt 修正评估（fold-0 val，
   eval_trifusion_pesudo_gt 聚合口径；`eval/logs/ckpt_sweep_full`、`ckpt_sweep_ablation`）：**
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""汇总 eval_table3_unified.py 各方法输出为一张 Markdown 表（含 best-single 行）。
+"""汇总 eval_table3_unified.py 各方法输出为 Markdown 表。
 
-best-single：对三个 single_* 行的 person_env_metrics_fold_{fold}.csv，按序列取 MPJPE 最小
-视角，再对序列取均值（oracle）。其余行直接读 unified_summary.json（fold 级聚合）。
+两种聚合口径都给出（同一份逐序列 CSV）：
+  - seq-mean：先逐序列（person×env）求指标，再对序列取均值——与另一会话的同子集对照表一致；
+  - fold-agg：eval_trifusion_pesudo_gt 的 fold 级聚合（unified_summary.json）。
+best-single（oracle）：按序列取 MPJPE 最小视角，仅在 seq-mean 口径下定义。
 """
 from __future__ import annotations
 
@@ -14,7 +16,9 @@ from pathlib import Path
 ORDER = ["single_front", "single_left", "single_right", "best_single", "mean", "median", "learned", "model"]
 LABEL = {"single_front": "single front", "single_left": "single left", "single_right": "single right",
          "best_single": "best single (oracle, per-sequence)", "mean": "fuse mean (= uniform gate)",
-         "median": "fuse median", "learned": "learned fusion baseline (1.9K)", "model": "TriPoseFusion"}
+         "median": "fuse median", "learned": "learned fusion baseline (1.9K, pseudo-GT supervised)",
+         "model": "TriPoseFusion (self-supervised)"}
+METRICS = ["mpjpe", "pa_mpjpe", "mpjpe_pa_frames", "pck@0.1"]
 
 
 def _seq_rows(d: Path, fold: int):
@@ -29,44 +33,59 @@ def _seq_rows(d: Path, fold: int):
     return rows
 
 
+def _seq_mean(rows):
+    out = {}
+    for m in METRICS:
+        v = [r[m] for r in rows.values() if m in r and r[m] == r[m]]
+        out[m] = sum(v) / len(v) if v else float("nan")
+    out["n"] = len(rows)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--root", type=Path, required=True, help="eval_table3_unified 的 eval.output_dir")
+    ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--fold", type=int, default=0)
     a = ap.parse_args()
 
-    summ = {}
+    fold_agg, seq_mean, groups, robust = {}, {}, {}, {}
     for m in ORDER:
         p = a.root / m / "unified_summary.json"
         if p.exists():
-            summ[m] = json.load(open(p))
+            s = json.load(open(p))
+            fold_agg[m] = s["metrics"]; groups[m] = s.get("groups") or {}; robust[m] = s.get("robust_canonicalizer")
+        rows = _seq_rows(a.root / m, a.fold)
+        if rows:
+            seq_mean[m] = _seq_mean(rows)
 
-    # best-single（oracle）
-    singles = {m: _seq_rows(a.root / m, a.fold) for m in ("single_front", "single_left", "single_right") if (a.root / m).exists()}
-    if len(singles) == 3 and all(singles.values()):
+    singles = {m: _seq_rows(a.root / m, a.fold) for m in ("single_front", "single_left", "single_right")}
+    if all(singles.values()):
         keys = set.intersection(*[set(v.keys()) for v in singles.values()])
-        agg = {"mpjpe": [], "pa_mpjpe": [], "mpjpe_pa_frames": [], "pck@0.1": []}
+        best_rows = {}
         for k in keys:
             best = min(singles, key=lambda m: singles[m][k].get("mpjpe", float("inf")))
-            for metric in agg:
-                if metric in singles[best][k]:
-                    agg[metric].append(singles[best][k][metric])
-        summ["best_single"] = {"method": "best_single", "robust_canonicalizer": summ.get("single_front", {}).get("robust_canonicalizer"),
-                               "metrics": {m: sum(v) / len(v) for m, v in agg.items() if v}, "note": f"per-sequence oracle over {len(keys)} sequences (sequence-mean aggregation)"}
+            best_rows[k] = singles[best][k]
+        seq_mean["best_single"] = _seq_mean(best_rows)
+        robust["best_single"] = robust.get("single_front")
 
-    print("| 方法 | canonicalizer | MPJPE | PA-MPJPE | MPJPE(PA 同掩码) | PCK@0.10 | body | hands |")
-    print("|---|---|---|---|---|---|---|---|")
+    f = lambda d, k: f"{d[k]:.4f}" if k in d and d[k] == d[k] else "–"
+    print(f"### seq-mean 口径（逐序列均值，n={next(iter(seq_mean.values()))['n'] if seq_mean else '?'}）")
+    print("| 方法 | canonicalizer | MPJPE | PA-MPJPE | MPJPE(PA 同掩码) | PCK@0.10 |")
+    print("|---|---|---|---|---|---|")
     for m in ORDER:
-        s = summ.get(m)
-        if not s:
-            continue
-        mt = s["metrics"]; g = s.get("groups") or {}
-        rc = "robust" if s.get("robust_canonicalizer") else "non-robust"
-        f = lambda k: f"{mt[k]:.4f}" if k in mt and mt[k] == mt[k] else "–"
-        gb = f"{g['body']:.3f}" if g.get("body") is not None else "–"
-        gh = f"{g['hands']:.3f}" if g.get("hands") is not None else "–"
-        print(f"| {LABEL[m]} | {rc} | {f('mpjpe')} | {f('pa_mpjpe')} | {f('mpjpe_pa_frames')} | {f('pck@0.1')} | {gb} | {gh} |")
-    (a.root / "table3_unified.json").write_text(json.dumps(summ, indent=2, ensure_ascii=False))
+        if m in seq_mean:
+            d = seq_mean[m]
+            print(f"| {LABEL[m]} | {'robust' if robust.get(m) else 'non-robust'} | {f(d,'mpjpe')} | {f(d,'pa_mpjpe')} | {f(d,'mpjpe_pa_frames')} | {f(d,'pck@0.1')} |")
+    print()
+    print("### fold-agg 口径（eval_trifusion fold 级聚合）+ 关节分组")
+    print("| 方法 | MPJPE | PA-MPJPE | MPJPE(PA 同掩码) | PCK@0.10 | head | shoulders_neck | body | hands |")
+    print("|---|---|---|---|---|---|---|---|---|")
+    for m in ORDER:
+        if m in fold_agg:
+            d = fold_agg[m]; g = groups.get(m, {})
+            gg = lambda k: f"{g[k]:.3f}" if g.get(k) is not None else "–"
+            print(f"| {LABEL[m]} | {f(d,'mpjpe')} | {f(d,'pa_mpjpe')} | {f(d,'mpjpe_pa_frames')} | {f(d,'pck@0.1')} | {gg('head')} | {gg('shoulders_neck')} | {gg('body')} | {gg('hands')} |")
+    (a.root / "table3_unified.json").write_text(json.dumps({"seq_mean": seq_mean, "fold_agg": fold_agg, "groups": groups, "robust": robust}, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
