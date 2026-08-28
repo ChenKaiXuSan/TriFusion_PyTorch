@@ -80,7 +80,9 @@ def _resolve_ckpt(config: DictConfig) -> Path:
 def _load_module(
     config: DictConfig, ckpt: Path, device: torch.device
 ) -> TriFusionPoseTrainer:
-    payload = torch.load(str(ckpt), map_location="cpu")
+    # Our own Lightning checkpoints embed omegaconf objects in hparams, which
+    # torch>=2.6 rejects under the weights_only=True default.
+    payload = torch.load(str(ckpt), map_location="cpu", weights_only=False)
     state_dict = (
         payload["state_dict"]
         if isinstance(payload, dict) and "state_dict" in payload
@@ -259,7 +261,13 @@ def _compute_sample_metrics(
     pck_thresholds: list[float],
 ) -> Dict[str, float]:
     dist = torch.linalg.norm(pred_btj3 - gt_btj3, dim=-1)
-    valid = valid_btj.bool()
+    # Same protocol as the baseline scripts: exclude non-finite pred/gt points,
+    # which would otherwise crash the Procrustes SVD.
+    valid = (
+        valid_btj.bool()
+        & torch.isfinite(pred_btj3).all(dim=-1)
+        & torch.isfinite(gt_btj3).all(dim=-1)
+    )
     valid_count = int(valid.sum().item())
     if valid_count == 0:
         return {}
