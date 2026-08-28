@@ -112,7 +112,7 @@ PA-MPJPE 0.062 m，PA < MPJPE 反常消失——归因于上述三处修复本�
   | base_simple（无 robust canon、无 TCN、无多尺度速度） | 0.9478 | 0.346 |
   | uniform_gate | 0.9488 | 0.346 |
   | no_cross_view_attention | 0.9487 | 0.346 |
-  | full_gate_lambda0 | 【待填】 | |
+  | full_gate_lambda0（λ_gate=0，gate 仍精确 0.333） | 0.9478 | 0.344 |
   | （旧 ckpt，同口径） | 0.949 | 0.346 |
 
   **结论：架构开关与 epoch 均无关，所有配置收敛到同一解（≈ 中位数融合）。**
