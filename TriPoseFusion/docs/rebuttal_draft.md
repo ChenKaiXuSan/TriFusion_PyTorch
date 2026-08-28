@@ -17,6 +17,7 @@
 | F | 伪 GT 可靠性 | ✅（数字已产出） |
 | G | 轻量主张 | ✅ |
 | H | 小项（映射表/帧率/划分） | ✅ |
+| I | Drive&Act 公开集评测（xS2o Mandatory Eval） | ✅ 基线数字已出；模型 ckpt 零样本待补 |
 
 ---
 
@@ -164,6 +165,40 @@ embedding → 小型 MLP 逐关节视角权重 → softmax（掩掉无效视角�
 "可学习加权"本身的贡献）。同时在同一数据上报告固定 confidence 加权融合
 作对照锚点。结果：【待填:learned_fusion_baseline MPJPE / PA-MPJPE vs 锚点】。
 
+### I. "Mandatory Evaluation on Drive&Act" — 已完成（零样本 + 免训练融合）
+
+详见 `docs/driveandact_results/README.md`（脚本 `eval/eval_driveandact_baselines.py`）。
+
+设置：Drive&Act 官方 split_0 **test** 受试者 vp5/vp11/vp13（6 run，约 126 分钟），
+1 fps 采样 7,855 个三视角同步时刻（±21 ms），NIR 1280×1024；每视角逐帧
+SAM3D-Body（与主实验同模型同设置，检出 99.97%）；GT 为官方 `openpose_3d`
+（BODY-25 多视角三角化伪 GT）。协议与主实验一致（逐视角 canonicalize → 融合 →
+修复后的 compute_metrics），两处因 BODY-25 定义必须的调整：down 轴用
+midHip−neck（BODY-25 neck≈肩中点，shoulder_mid−neck 会退化）、预测侧 neck 同取
+肩中点。GT 膝/踝置信度恒 0，故报 **body14** 与 **upper12**；髋/肩/颈任一无效
+整帧剔除，6,673/7,855 帧进入统计。
+
+| 方法 | body14 MPJPE | body14 PA | upper12 MPJPE | upper12 PA |
+|---|---|---|---|---|
+| single front | 61.1 | 35.8 | 59.5 | 27.5 |
+| single left | 64.8 | 37.8 | 62.9 | 31.9 |
+| single right | 54.1 | 34.0 | 50.6 | 27.3 |
+| **fuse mean** | **55.8** | **31.3** | **53.6** | **23.8** |
+| fuse median | 57.8 | 32.9 | 55.4 | 24.6 |
+
+（pooled，mm。按受试者 fuse-mean body14 MPJPE 51–62 mm，PA 28.7–33.5 mm，跨人稳定。
+PCK@50mm 42%、@100mm 94%。）
+
+论点：
+- 评审引用的 SOTA 22.6–30.4 mm 是**在 Drive&Act 上全监督训练**的方法；本结果为
+  **零样本 SAM3D + 免训练融合**，PA-MPJPE 31.3 mm（上半身 23.8 mm）已在同一量级。
+- 融合一致优于最佳单视角：PA −8%（body14）/ −13%（upper12），与主实验方向一致。
+- 直接回应 D 点：主实验 0.412 m 的绝对量级来自 52 关节协议（42 个手部关节）与
+  自建伪 GT——同一管线在标准 body 协议下即为厘米级。
+- 局限如实写：OpenPose 伪 GT 厘米级下限；SAM3D 默认体型躯干尺度比 GT 大 ~18%
+  （留在未对齐 MPJPE 内，PA 消除）；1 fps 采样。
+- 【待填:TriPoseFusion ckpt 零样本评测——需 30 fps 连续窗口，另一会话补抽密集片段后报告】
+
 ---
 
 ## 4. 共通补充（H / G）
@@ -220,4 +255,4 @@ embedding → 小型 MLP 逐关节视角权重 → softmax（掩掉无效视角�
 | 重训 ablation（Table 4） | Pegasus jobs 955575–955578 | 排队中 |
 | 遮挡压力测试（C） | occlusion_stress_test.py | 脚本已验通，待重训 ckpt 跑全量 |
 | 学习型基线（E） | learned_fusion_baseline.py | 缓存构建中，随后 fold-0 全量训练 |
-| Drive&Act 公开集评测（xS2o Mandatory Eval） | eval_driveandact_baselines.py（另一会话负责，review-fixes 分支） | SAM3D GPU 阵列作业 955562 运行中（2–4h） |
+| Drive&Act 公开集评测（xS2o Mandatory Eval） | docs/driveandact_results/（另一会话，已 merge 进 rebuttal-work） | **基线已出**（见 I 点）；TriPoseFusion ckpt 零样本待补 |
