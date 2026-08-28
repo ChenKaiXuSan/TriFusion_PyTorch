@@ -12,7 +12,7 @@
 | A | Procrustes 缺陷披露 + 修正数字 | 文字 ✅，数字【待填:修正评估】 |
 | B | 回退算法伪代码 | ✅ |
 | C | gating 塌缩回应 | 框架 ✅，依赖 c_lam0 重训 + 压力测试 |
-| D | 绝对误差 vs SOTA | 框架 ✅，依赖 per-joint 分解数字 |
+| D | 绝对误差 vs SOTA | ✅ 分解表已出（躯干 0.340 全场最优、手部 1.580 全场最差），讲法已改写 |
 | E | 学习型基线 | ✅ 已出数（1.9K 参数：MPJPE 0.981 / PA 0.290，优于旧 ckpt 主模型） |
 | F | 伪 GT 可靠性 | ✅（数字已产出） |
 | G | 轻量主张 | ✅ |
@@ -203,17 +203,32 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
 - per-joint 分解（fold-0 val 20 序列，逐序列均值再平均，52 空间分组：
   head 0–4 / shoulders_neck [5,6,49,50,51] / body = 两者合集 / hands 7–48）：
 
-  | 方法 | head | shoulders_neck | **body (10)** | **hands (42)** |
-  |---|---|---|---|---|
-  | 固定融合基线（各行区间） | ~0.48 | ~0.29 | 0.387–0.389 | 1.346–1.424 |
-  | 学习型融合基线（E 点） | 0.456 | 0.265 | **0.360** | **1.294** |
-  | TriPoseFusion（旧 ckpt） | 【待填:另一会话 joint_mpjpe_fold_0.json】 | | | |
-  | TriPoseFusion（重训 ckpt） | 【待填:955575 出 ckpt 后】 | | | |
+  | 方法 | head | shoulders_neck | **body (10)** | **hands (42)** | hands÷body |
+  |---|---|---|---|---|---|
+  | single front | 0.485 | 0.288 | 0.387 | 1.424 | 3.68× |
+  | single left | 0.482 | 0.295 | 0.388 | 1.366 | 3.52× |
+  | single right | 0.485 | 0.293 | 0.389 | 1.398 | 3.59× |
+  | best single | 0.481 | 0.294 | 0.387 | **1.346** | 3.48× |
+  | fuse mean / median / median+smooth | 0.484 | 0.292 | 0.388 | 1.390–1.393 | 3.58× |
+  | 学习型融合基线（E 点，1.9K） | 0.456 | 0.265 | 0.360 | **1.294** | 3.59× |
+  | **TriPoseFusion（旧 ckpt）** | **0.414** | **0.265** | **0.340** | 1.580 | 4.65× |
+  | TriPoseFusion（重训 ckpt） | 【待填:955575 出 ckpt 后，同样输出四组】 | | | | |
 
-  **躯干关节误差 0.36–0.39 m vs 手部 1.3–1.4 m**：整体 MPJPE ~1.0 m 由 42 个手部
-  关节主导（手部占 52 关节的 81%，伪 GT 手部有效率仅 34%）；绝对量级与 SOTA
-  场景的差距主要来自手部与伪 GT 噪声，非方法本身（Drive&Act 标准 body 协议下
-  同一管线为厘米级，见 I 点）。
+  （合并表 `corrected_fold0_val_joint_groups.json`；口径：主模型行为 fold 内
+  valid-point 加权，其余为逐序列均值再平均，差异不足以翻转下述模式，正文须注明。）
+
+  **D 点讲法（替换笼统的"不可直接比较"）**：
+  1. 绝对误差由 42 个手部关节主导——**所有方法**手部/躯干误差比 ≈ 3.5×
+     （手部占 52 关节的 81%，伪 GT 手部有效率仅 34%）；Drive&Act 标准 body 协议
+     下同一管线为厘米级（I 点）。这是与 SOTA 数字量级差异的来源。
+  2. **主模型躯干误差 0.340 m 显著优于所有基线**（固定融合 0.388 −12%，
+     学习型 0.360 −6%）——模型在可靠关节上的优势是真实的。
+  3. **手部 1.580 m 是全场最差**（vs best single 1.346 +17%、学习型 1.294 +22%）：
+     整体 MPJPE 的小幅领先全部来自躯干，手部被学习模块拉坏。这是当前模型的
+     明确弱点，如实写出，并与 19jf 手部遮挡质疑衔接（手部伪 GT 本身 66% 无效，
+     模型在此学到的很可能是噪声）。重训 ckpt 评估须同样输出四组，检查手部退化
+     是否为旧 canonicalizer bug 造成的训练污染；bone/temporal 项需针对手部单独
+     检查（可考虑修订版对手部关节降权或单独报告）。
 
 ### E. 缺学习型融合基线
 
@@ -328,7 +343,7 @@ PCK@50mm 42%、@100mm 94%。）
 |---|---|---|
 | corrected Table 3 各行 | eval_fusion_baselines / eval_single_sam3d / eval_additional_baselines（修正代码，另一会话 15:01 启动的 run 经审计确认有效） | 本机运行中 |
 | corrected full 模型（fold0 val） | eval_trifusion_pesudo_gt + 旧 ckpt | **已出**：MPJPE 0.949 / PA 0.346 / gate 0.3333 均匀 |
-| per-joint 分解（D/F） | 上述 corrected 评估的 per_joint_mpjpe 输出 | 随评估产出 |
+| per-joint 分解（D/F） | corrected_fold0_val_joint_groups.json（另一会话合并表） | **已出**（旧 ckpt）；重训 ckpt 四组待补 |
 | c_lam0 gate 分布（C） | Pegasus job 955579 | 排队中 |
 | 重训 ablation（Table 4） | Pegasus jobs 955575–955578 | 排队中 |
 | 遮挡压力测试（C） | occlusion_stress_test.py | 脚本已验通，待重训 ckpt 跑全量 |
