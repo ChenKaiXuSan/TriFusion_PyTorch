@@ -275,6 +275,7 @@ def _compute_sample_metrics(
     mpjpe = float(dist[valid].mean().item())
 
     pa_dist_values = []
+    raw_dist_pa_frames = []  # 与 PA 完全同掩码（≥3 有效关节的帧）的未对齐误差
     for frame_idx in range(pred_btj3.shape[0]):
         frame_valid = valid[frame_idx]
         if int(frame_valid.sum().item()) < 3:
@@ -283,15 +284,19 @@ def _compute_sample_metrics(
         gt_frame = gt_btj3[frame_idx][frame_valid]
         pred_aligned = _procrustes_align(pred_frame, gt_frame)
         pa_dist_values.append(torch.linalg.norm(pred_aligned - gt_frame, dim=-1))
+        raw_dist_pa_frames.append(dist[frame_idx][frame_valid])
 
     if pa_dist_values:
         pa_mpjpe = float(torch.cat(pa_dist_values).mean().item())
+        mpjpe_pa_frames = float(torch.cat(raw_dist_pa_frames).mean().item())
     else:
         pa_mpjpe = float("nan")
+        mpjpe_pa_frames = float("nan")
 
     metrics: Dict[str, float] = {
         "mpjpe": mpjpe,
         "pa_mpjpe": pa_mpjpe,
+        "mpjpe_pa_frames": mpjpe_pa_frames,
         "valid_joints": float(valid_count),
     }
     for thr in pck_thresholds:
