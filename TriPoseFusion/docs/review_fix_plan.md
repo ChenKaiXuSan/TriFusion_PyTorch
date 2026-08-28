@@ -88,6 +88,23 @@ neck → x 轴为零向量 → 两次叉积后旋转矩阵为零矩阵 → 整�
    模型输入处理，严格起见全部 ablation 需用修复后代码重训。优先级：
    `full`、`uniform_gate`、`base_simple`、`no_cross_view_attention`。
 
+## 二·五、结论更新（2026-08-28 晚，两条独立评估链确认）
+
+- 修复后重训的所有配置（full / base_simple / uniform_gate / gate_lambda0）与旧 ckpt
+  在修正评估下全部收敛到 MPJPE ≈0.948 / PA ≈0.346（fold-0 val）。
+- 模型输出 ≡ canonicalized **均值融合 + 约 6 mm 的 TCN 残差**（‖P_final − mean‖≈6 mm，
+  ‖P_final − median‖≈26 mm），三者在 MPJPE 上不可区分。根因：L_tri 的 teacher 是三视角
+  中位数，view/bone/temp 均为自洽项，均匀融合即最优（平凡解）；val loss 的 99% 是 InfoNCE。
+- 论文 Table 4 "robust canonicalization 0.846→0.412" 为 bug 假象；本文档早期同子集表中的
+  "MPJPE −4.4%"以及"躯干 −12% 最优 / 手部 +17% 最差"均为**跨协议假象**：模型行的 GT 走
+  `module.model._canonicalize_pose`，基线行走 numpy `canonicalize_pose`，同协议下 median
+  融合四组 = 0.412/0.252/0.332/1.582，与模型行相同。**Table 3 全部行必须走同一条
+  canonicalize 路径**（手部对旋转轴差异最敏感，可差 0.23 m）。
+- 对 rebuttal 的含义：路线 A（诚实披露 + 收窄为 canonicalization 协议 / 数据集 / 评估修正）
+  是唯一站得住的主线；LOO teacher（rebuttal-work 分支）是方法改动，只作附加实验。
+- 仍成立的结论：手部主导绝对误差（所有方法手部/躯干 ≈3.5–4.7×）；单视图 2.078 m 是原始相机
+  坐标系未 canonicalize 的数字；模型 0.87M 参数 / CPU 6.2 ms/帧。
+
 ## 三、rebuttal 各点回应策略
 
 - **A（LAYQ：PA>MPJPE 反常）**：如实说明发现的对齐实现缺陷 + 给修正数字 +
