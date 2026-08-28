@@ -56,3 +56,33 @@ PCK@50mm 42%，@100mm 94%，AUC(0–150mm) 0.626。
   待补抽密集片段后另行报告。
 - 数据与中间产物：`/work/1/SKIING/chenkaixu/data/drive/driveandact/tripose_eval/`
   （frames / sam3d / gt），管线脚本在 `../pipeline/`。
+
+## DLT 三角化基线（绝对坐标系，回应 LAYQ "direct 2D triangulation baseline"）
+
+脚本 `eval/eval_driveandact_triangulation.py`，数字见 `driveandact_triangulation.json`。
+用各 run 自带 `calibration.json`（内参 + k1/k2 畸变 + 四元数外参；已验证 R,t 为
+world→cam，世界系 = ids_1 相机系）对三视角 SAM3D 2D 做去畸变 DLT 三角化。
+**absolute** 列直接在 GT 世界系比较、不做任何对齐或规范化——与 Drive&Act 上
+SOTA 报告的 MPJPE **严格同口径**；**canonical** 列与上表协议相同。
+帧集与上表一致（6,673 帧），neck 取三角化后双肩中点。合成自检：还原误差 1.9e-4 m。
+
+| 视角组合 | abs body14 MPJPE / PA | abs upper12 MPJPE / PA | canon body14 MPJPE / PA |
+|---|---|---|---|
+| **front+left+right** | **32.5 / 29.0** | **22.2 / 18.0** | **46.8 / 29.0** |
+| left+right | 35.9 / 30.2 | 25.4 / 19.2 | 47.8 / 30.2 |
+| front+left | 36.5 / 30.2 | 30.4 / 19.7 | 48.1 / 30.2 |
+| front+right | 45.5 / 33.2 | 31.0 / 22.3 | 55.6 / 33.2 |
+
+按 run（3 视角 abs body14 MPJPE）：vp11 28.8 / 28.9 · vp13 33.1 / 30.9 · vp5 37.4 / 33.6 mm。
+标定/同步 sanity：GT 3D 投影到各视角与 SAM3D 2D 的像素残差中位 15.5 px（@1280×1024）。
+
+要点：
+- **零样本 SAM3D + 免训练几何三角化，在 Drive&Act 官方 test 受试者上绝对 MPJPE
+  32.5 mm（上半身 22.2 mm）**，已落在评审引用的全监督 SOTA 区间（22.6–30.4 mm）边缘，
+  上半身甚至优于该区间下限。评审"412 mm 说明系统输出不可用"的推断不成立：
+  量级差异来自 52 关节手部协议与自建伪 GT，而非关键点级融合范式本身。
+- 三角化的 canonical 系 MPJPE（46.8 mm）优于 canonical 系 mean 融合（55.8 mm）；
+  PA 两者相当（29.0 vs 31.3 mm）——几何约束主要修正的是全局尺度/位置，
+  而非形状。该基线依赖精确标定，论文场景（无标定、杆载/车载自由布局）不可用，
+  这正是免标定关键点融合的设计动机。
+- 去掉任一视角误差上升 10–40%（front+right 最差 45.5 mm），说明三视角冗余有实际贡献。
