@@ -216,7 +216,7 @@ def summarize(rows: list[dict]) -> dict:
         vals = [r["metrics"].get(k) for r in rows if r["metrics"].get(k) is not None]
         agg[k] = float(np.mean(vals)) if vals else None
     pck_all = {}
-    for th in ("0.02", "0.05", "0.1", "0.15"):
+    for th in ("0.02", "0.05", "0.10", "0.15"):  # compute_metrics 用 f"{th:.2f}" 作键
         vals = [
             r["metrics"]["pck"].get(th)
             for r in rows

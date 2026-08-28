@@ -13,7 +13,7 @@
 | B | 回退算法伪代码 | ✅ |
 | C | gating 塌缩回应 | 框架 ✅，依赖 c_lam0 重训 + 压力测试 |
 | D | 绝对误差 vs SOTA | 框架 ✅，依赖 per-joint 分解数字 |
-| E | 学习型基线 | 依赖新基线训练 |
+| E | 学习型基线 | ✅ 已出数（1.9K 参数：MPJPE 0.981 / PA 0.290，优于旧 ckpt 主模型） |
 | F | 伪 GT 可靠性 | ✅（数字已产出） |
 | G | 轻量主张 | ✅ |
 | H | 小项（映射表/帧率/划分） | ✅ |
@@ -207,7 +207,24 @@ canonicalized pose 塌缩到原点——这正是评审猜测的来源，已修�
 softmax（掩掉无效视角）加权融合 → 深度可分离时间卷积残差头。模型 ~2K 参数
 （刻意远小于主模型 0.87M，隔离"可学习加权"本身的贡献）。同时在同一数据上
 报告固定加权融合（= mean，因置信度缺失）作对照锚点。
-结果：【待填:learned_fusion_baseline MPJPE / PA-MPJPE vs 锚点】。
+
+**结果（fold-0 val 20 序列，逐序列均值，`eval/logs/learned_fusion_baseline/learned_fusion_fold0.json`）：**
+
+| 方法 | 参数量 | MPJPE | PA-MPJPE | PCK@0.10 |
+|---|---|---|---|---|
+| 固定均值融合（锚点，同数据） | 0 | 1.059 | 0.336 | – |
+| **学习型融合基线（本节）** | 1.9K | **0.981** | **0.290** | **0.152** |
+| TriPoseFusion（旧 ckpt，同子集，见 A 点） | 0.87M | 0.994 | 0.367 | 0.149 |
+
+训练 3000 步内 val 指标稳定（MPJPE 0.981–0.989，PA 0.284–0.290），best step 1500。
+学到的平均视角权重 front 0.41 / left 0.32 / right 0.27——**仅凭跨视角几何一致性
+即可学出非均匀、有意义的视角权重**（对 C 点的旁证：自适应加权在此输入上可学）。
+
+⚠️ **对 rebuttal 的含义**：修正管线下，1.9K 参数的学习型基线在三项指标上均
+**优于旧 ckpt 的主模型**。与 A 点结论一致——旧 ckpt 与修正管线错配，
+Pegasus 重训 ckpt 必须同时超过 (a) 固定融合基线 (b) 本学习型基线，主张才成立。
+若重训后仍不及本基线，rebuttal 应诚实承认并把贡献收窄（见 A 点第 4 条），
+同时可把本基线作为论文修订版的新对照行（评审明确要求的学习型基线）。
 
 ### I. "Mandatory Evaluation on Drive&Act" — 已完成（零样本 + 免训练融合）
 
@@ -298,5 +315,5 @@ PCK@50mm 42%、@100mm 94%。）
 | c_lam0 gate 分布（C） | Pegasus job 955579 | 排队中 |
 | 重训 ablation（Table 4） | Pegasus jobs 955575–955578 | 排队中 |
 | 遮挡压力测试（C） | occlusion_stress_test.py | 脚本已验通，待重训 ckpt 跑全量 |
-| 学习型基线（E） | learned_fusion_baseline.py | 缓存构建中，随后 fold-0 全量训练 |
+| 学习型基线（E） | learned_fusion_baseline.py | **已出**（fold-0：MPJPE 0.981 / PA 0.290 / PCK 0.152）；其余 fold 可按需补 |
 | Drive&Act 公开集评测（xS2o Mandatory Eval） | docs/driveandact_results/（另一会话，已 merge 进 rebuttal-work） | **基线已出**（见 I 点）；TriPoseFusion ckpt 零样本待补 |
