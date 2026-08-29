@@ -154,6 +154,37 @@ front P95 42.05 vs 42.03 px）下的 Table 3 基线行（全 88 序列，canonic
    `/work/1/SKIING/chenkaixu/data/drive/sam3d_body_triangulated_gt_optext`，随后重跑
    mean/median/单视角基线与旧 ckpt 模型行，与旧 GT 结果并列（结果见二·八）。
 
+## 二·八、伪 GT 尺度错误与逐序列自标定（2026-08-29，新论文主线）
+
+**发现**：构造外参下的三角化伪 GT 尺度错误且逐受试者不一致。SAM3D 各视角肩宽稳定在
+0.34–0.40 m（中位 0.371），而伪 GT 肩宽中位 0.84 m、范围 0.46–2.10 m；GT/SAM3D 尺度比
+中位 2.38×（1.24–5.99×），与光照无关但强依赖受试者（01–10 号约 1.2–1.8×，11–21 号
+2.3–3.5×，24 号 5.8×）→ 各采集场次相机摆放不同，却共用同一套假设外参。
+**后果**：本数据集上所有绝对 MPJPE（论文 0.412、修正后 0.95、均值融合 0.97）主要是
+GT 尺度误差而非姿态误差；只有 PA-MPJPE 可信。旧 GT 上学习型融合的 MPJPE 增益
+（5 折 0.767 vs mean 0.865）大半是学到了 ~2.4× 的尺度放大（val 序列 learned 1.27 /
+mean 0.52 / GT 1.09），其 Drive&Act 零样本因此变差（PA 28–37 mm vs mean 23.1；输出
+尺度比 2.1×）。
+
+**修复**（`traingulation/calibrate_extrinsics.py`）：
+1. `--per-sequence`：每条序列用自身 2D 观测做 Huber BA（left 固定、front/right 6DoF）。
+   88 序列：rpe 9.60→3.37 px，front 参与率 8%→45%；但基线 0.70 m 规范下肩宽仍
+   0.23–1.15 m（各场次真实基线不同）。
+2. `--anchor-scale`：尺度是未标定多视角几何的规范自由度（绕 left 相机整体缩放不改变
+   重投影），以各序列 SAM3D `pred_keypoints_3d` 的肩宽为度量先验逐序列锚定 →
+   肩宽 0.370±0.015 m，rpe 不变；反推各场次基线 0.25–1.07 m（中位 0.80）。
+3. 三角化 `--extrinsics-json <目录>` 按序列读取外参，重建 GT `sam3d_body_triangulated_gt_perseq`。
+
+| 伪 GT 版本（88 序列，70 万帧） | 有效点比例 | 平均 rpe | 肩宽中位 [范围] / std |
+|---|---|---|---|
+| 原始（构造外参） | 0.358 | 9.60 px | 0.839 m [0.46, 2.10] / 0.369 |
+| 全局优化外参 | 0.378 | 5.18 px | 0.410 m [0.28, 3.85] / 0.422 |
+| 逐序列标定＋尺度锚定 | 0.377 | **3.31 px** | **0.368 m [0.325, 0.389] / 0.015** |
+
+外参文件入库：`traingulation/optimized_extrinsics_per_sequence/*.json`。后续所有新论文
+实验（`eval/learned_fusion_experiments.py`，缓存 `learned_fusion_cache_perseq`）以此 GT 为准；
+旧 GT 结果（tag main/notemporal/h8/h128/nojointemb）仅作对照。
+
 ## 三、rebuttal 各点回应策略
 
 - **A（LAYQ：PA>MPJPE 反常）**：如实说明发现的对齐实现缺陷 + 给修正数字 +
