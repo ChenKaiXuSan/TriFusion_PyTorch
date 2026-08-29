@@ -185,6 +185,28 @@ mean 0.52 / GT 1.09），其 Drive&Act 零样本因此变差（PA 28–37 mm vs 
 实验（`eval/learned_fusion_experiments.py`，缓存 `learned_fusion_cache_perseq`）以此 GT 为准；
 旧 GT 结果（tag main/notemporal/h8/h128/nojointemb）仅作对照。
 
+## 二·九、正确 GT 上的学习型融合结果（2026-08-29，tag perseq_main，5 折，52 关节含手）
+
+| 方法 | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |
+|---|---|---|---|
+| single front / left / right | 0.172 / 0.161 / 0.152 | 0.059 / 0.046 / 0.045 | 0.459 / 0.473 / 0.477 |
+| best single（oracle） | 0.145 | 0.046 | 0.488 |
+| fuse mean（免训练） | 0.149 | 0.044 | 0.497 |
+| fuse median | 0.152 | 0.046 | 0.485 |
+| learned（三角化监督，1.9K，固定步数） | 0.149 | 0.044 | 0.507 |
+
+- 学习型 = 均值融合（逐折 −2.2%～+4.4%），学到的权重 0.32/0.33/0.34 ≈ 均匀；旧 GT 上的
+  −12.5% 增益与 front 0.41 偏置为尺度拟合假象（旧 GT 消融：去时序头后 0.872 ≈ mean 0.865，
+  hidden 8/128、无关节 embedding 均 0.766——增益全部来自时序头学到的 ~2.4× 尺度放大）。
+- 均值融合优于任一固定单视角（MPJPE −2.5%、PA −3%），≈ oracle 最佳单视角。
+- Drive&Act 零样本（hs10 PA）：learned 22.2–24.8 mm（5 折）≈ mean 23.1；尺度比 0.95。
+- 视角损坏（正确 GT 上学习型唯一可测收益）：置零一视角 learned 权重 0.11、MPJPE +7–11%
+  vs 均值融合 +18–19%；加噪权重 0.26–0.29、+3–5% vs +12%；均不及剔除该视角的 oracle。
+- **对 rebuttal**：E 点"1.9K 监督基线优于主模型 14%/存在显著可学余量"须撤回（尺度假象）；
+  伪 GT 尺度未标定须与 Procrustes 缺陷一并披露，并给出重标定 GT 上的修正表。
+- **对新论文**：主线 = 逐序列自标定/尺度锚定伪 GT 流水线 + 数据集基准 + 免训练
+  canonicalized 融合；学习型融合作分析（收敛到均匀权重，仅损坏稳健性有收益）。
+
 ## 三、rebuttal 各点回应策略
 
 - **A（LAYQ：PA>MPJPE 反常）**：如实说明发现的对齐实现缺陷 + 给修正数字 +
