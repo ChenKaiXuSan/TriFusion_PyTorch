@@ -1,0 +1,24 @@
+{
+  "method": "single_left",
+  "robust_canonicalizer": true,
+  "ckpt": "/work/1/SKIING/chenkaixu/code/TriFusion/logs/train/trifusion_full_viewsfront_left_right_16f_fold0_dilatedtrue_msveltrue_gate0.01_robusttrue/2026-06-11/10-57-37/checkpoints/fold_0/0-0.80.ckpt",
+  "fold": 0,
+  "split": "val",
+  "metrics": {
+    "mpjpe": 0.20635371470772812,
+    "pa_mpjpe": 0.06787734390768828,
+    "mpjpe_pa_frames": 0.20635371470772812,
+    "valid_joints": 511.1109156751164,
+    "pck@0.02": 0.17263172300030422,
+    "pck@0.05": 0.3058884058269083,
+    "pck@0.1": 0.43042888639160404,
+    "num_items": 9665.0,
+    "skipped_samples": 25.0
+  },
+  "groups": {
+    "head": 0.10575427580792486,
+    "shoulders_neck": 0.034369539990057554,
+    "body": 0.07006190789899121,
+    "hands": 0.3481247097035623
+  }
+}
