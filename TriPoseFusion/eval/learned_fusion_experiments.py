@@ -65,10 +65,16 @@ def _metrics_rows(store: SeqStore, predict, pck) -> list[dict]:
 def training_free_rows(store: SeqStore, pck) -> dict[str, dict]:
     """Same cache, same compute_metrics: single views, oracle best single, mean, median."""
     out = {}
+
+    def _summ(rows):
+        agg = summarize(rows)
+        agg["groups"] = group_mpjpe(rows)
+        return agg
+
     for vi, view in enumerate(VIEWS):
-        out[f"single_{view}"] = summarize(_metrics_rows(store, lambda s, vi=vi: s["view_pose"][:, :, vi], pck))
-    out["fuse_mean"] = summarize(_metrics_rows(store, lambda s: fuse_views(s["view_pose"], s["view_conf"], "mean"), pck))
-    out["fuse_median"] = summarize(_metrics_rows(store, lambda s: fuse_views(s["view_pose"], s["view_conf"], "median"), pck))
+        out[f"single_{view}"] = _summ(_metrics_rows(store, lambda s, vi=vi: s["view_pose"][:, :, vi], pck))
+    out["fuse_mean"] = _summ(_metrics_rows(store, lambda s: fuse_views(s["view_pose"], s["view_conf"], "mean"), pck))
+    out["fuse_median"] = _summ(_metrics_rows(store, lambda s: fuse_views(s["view_pose"], s["view_conf"], "median"), pck))
     # oracle best single view per sequence (lowest MPJPE)
     best_rows = []
     for s in store.seqs:
@@ -80,6 +86,26 @@ def training_free_rows(store: SeqStore, pck) -> dict[str, dict]:
         if cands:
             best_rows.append({"person": s["person"], "env": s["env"], "metrics": min(cands, key=lambda m: m["mpjpe_m"])})
     out["best_single_oracle"] = summarize(best_rows)
+    out["best_single_oracle"]["groups"] = group_mpjpe(best_rows)
+    return out
+
+
+JOINT_GROUPS = {"head": list(range(0, 5)), "shoulders_neck": [5, 6, 49, 50, 51],
+                "body": list(range(0, 7)) + [49, 50, 51], "hands": list(range(7, 49))}
+
+
+def group_mpjpe(rows: list[dict]) -> dict[str, float]:
+    """Mean over sequences of the mean per-joint MPJPE within each joint group."""
+    out = {}
+    for g, idx in JOINT_GROUPS.items():
+        vals = []
+        for r in rows:
+            pj = r["metrics"].get("per_joint_mpjpe_m")
+            if pj:
+                v = [pj[i] for i in idx if i < len(pj) and pj[i] is not None]
+                if v:
+                    vals.append(float(np.mean(v)))
+        out[g] = float(np.mean(vals)) if vals else float("nan")
     return out
 
 
@@ -135,6 +161,108 @@ class ResidualFusion(LearnedFusion):
         return fused + delta, weights
 
 
+class SetFusion(torch.nn.Module):
+    """Triangulation-distilled set fusion (v2 model).
+
+    Per joint, the V monocular estimates are tokens [canonical xyz, disagreement to the
+    finite-view mean, finite flag] + view id + joint id embeddings. A masked transformer
+    across the view set (permutation-equivariant, any subset of views) yields gate logits
+    and a pooled feature; a transformer across the J joints propagates context along the
+    skeleton (hands from wrists); a depthwise temporal conv adds motion context. Two heads:
+    a 3D residual correction on top of the gated fusion and a per-joint log-scale of a
+    Laplace likelihood (uncertainty), trained with masked NLL against the pseudo-GT.
+    """
+
+    def __init__(self, d: int = 64, heads: int = 4, view_layers: int = 2, joint_layers: int = 1,
+                 num_joints: int = 52, num_views: int = 3, temporal: bool = True, kernel: int = 5,
+                 uncertainty: bool = True) -> None:
+        super().__init__()
+        self.d, self.uncertainty = d, uncertainty
+        self.in_proj = torch.nn.Linear(5, d)
+        self.view_emb = torch.nn.Embedding(num_views, d)
+        self.joint_emb = torch.nn.Embedding(num_joints, d)
+        mk = lambda: torch.nn.TransformerEncoderLayer(d, heads, dim_feedforward=2 * d, dropout=0.0, batch_first=True)
+        self.view_layers = torch.nn.ModuleList([mk() for _ in range(view_layers)])
+        self.joint_layers = torch.nn.ModuleList([mk() for _ in range(joint_layers)])
+        self.gate = torch.nn.Linear(d, 1)
+        self.temporal = temporal
+        if temporal:
+            self.tconv = torch.nn.Conv1d(d, d, kernel, padding=kernel // 2, groups=d)
+            torch.nn.init.zeros_(self.tconv.weight)
+            torch.nn.init.zeros_(self.tconv.bias)
+        self.head = torch.nn.Linear(d, 4 if uncertainty else 3)
+        torch.nn.init.zeros_(self.head.weight)
+        torch.nn.init.zeros_(self.head.bias)
+        self.last_logscale = None
+
+    def forward(self, view_pose: torch.Tensor, view_conf: torch.Tensor):
+        b, t, j, v, _ = view_pose.shape
+        finite = torch.isfinite(view_pose).all(dim=-1)  # (B,T,J,V)
+        pose = torch.nan_to_num(view_pose, nan=0.0)
+        n_finite = finite.sum(dim=-1, keepdim=True).clamp_min(1)
+        mean_pose = (pose * finite.unsqueeze(-1)).sum(dim=-2) / n_finite
+        disagreement = torch.linalg.norm(pose - mean_pose.unsqueeze(-2), dim=-1) * finite
+        feats = torch.cat([pose, disagreement.unsqueeze(-1), finite.float().unsqueeze(-1)], dim=-1)  # (B,T,J,V,5)
+        x = self.in_proj(feats) + self.view_emb.weight[None, None, None] + self.joint_emb.weight[None, None, :, None]
+        x = x.reshape(b * t * j, v, self.d)
+        any_finite = finite.any(dim=-1)  # (B,T,J)
+        pad = (~finite).reshape(b * t * j, v)
+        pad = pad & any_finite.reshape(-1, 1)  # rows with no finite view: keep unmasked to avoid NaN
+        for layer in self.view_layers:
+            x = layer(x, src_key_padding_mask=pad)
+        logits = self.gate(x).squeeze(-1).masked_fill(pad, -1e4)
+        weights = torch.softmax(logits, dim=-1)  # (BTJ,V)
+        fused = (pose.reshape(b * t * j, v, 3) * weights.unsqueeze(-1)).sum(dim=1)  # (BTJ,3)
+        pooled = (x * weights.unsqueeze(-1)).sum(dim=1)  # (BTJ,d)
+        h = pooled.reshape(b * t, j, self.d)
+        for layer in self.joint_layers:
+            h = layer(h)
+        h = h.reshape(b, t, j, self.d)
+        if self.temporal:
+            ht = h.permute(0, 2, 3, 1).reshape(b * j, self.d, t)
+            h = h + self.tconv(ht).reshape(b, j, self.d, t).permute(0, 3, 1, 2)
+        out = self.head(h)
+        pred = fused.reshape(b, t, j, 3) + out[..., :3]
+        self.last_logscale = out[..., 3] if self.uncertainty else None
+        pred = torch.where(any_finite.unsqueeze(-1).expand_as(pred), pred, torch.nan)
+        return pred, weights.reshape(b, t, j, v)
+
+
+def masked_laplace_nll(pred, gt, valid, logscale):
+    mask = valid & torch.isfinite(gt).all(dim=-1) & torch.isfinite(pred).all(dim=-1)
+    if not mask.any():
+        return pred.new_zeros(())
+    s = logscale[mask].clamp(-6, 3)
+    err = (pred[mask] - gt[mask]).abs().sum(dim=-1)
+    return (err * torch.exp(-s) + 3 * s).mean()
+
+
+def uncertainty_calibration(model, store: SeqStore) -> dict:
+    """Spearman correlation of predicted scale vs. actual error, and error of most/least confident deciles."""
+    if getattr(model, "last_logscale", None) is None and not isinstance(model, SetFusion):
+        return {}
+    errs, scales = [], []
+    model.eval()
+    with torch.no_grad():
+        for s in store.seqs:
+            pred, _ = model(torch.from_numpy(s["view_pose"]).unsqueeze(0), torch.from_numpy(s["view_conf"]).unsqueeze(0))
+            ls = model.last_logscale
+            if ls is None:
+                return {}
+            pred, ls = pred.squeeze(0).numpy(), ls.squeeze(0).numpy()
+            gt, valid = s["gt_pose"], s["gt_valid"] & np.isfinite(pred).all(-1) & np.isfinite(s["gt_pose"]).all(-1)
+            errs.append(np.linalg.norm(pred - gt, axis=-1)[valid])
+            scales.append(ls[valid])
+    model.train()
+    e, sc = np.concatenate(errs), np.concatenate(scales)
+    from scipy.stats import spearmanr
+    rho = float(spearmanr(sc, e).correlation)
+    order = np.argsort(sc)
+    k = max(len(e) // 10, 1)
+    return {"spearman_scale_vs_error": rho, "err_most_confident_decile": float(e[order[:k]].mean()),
+            "err_least_confident_decile": float(e[order[-k:]].mean()), "err_all": float(e.mean())}
+
+
 class _ZeroHead(torch.nn.Module):
     """Replaces weight_mlp: constant logits -> uniform softmax over finite views."""
 
@@ -143,6 +271,10 @@ class _ZeroHead(torch.nn.Module):
 
 
 def build_model(args) -> LearnedFusion:
+    if getattr(args, "model", "learned") == "setfusion":
+        return SetFusion(d=args.hidden if args.hidden >= 16 else 64, temporal=args.temporal,
+                         view_layers=args.view_layers, joint_layers=args.joint_layers,
+                         uncertainty=not args.no_uncertainty)
     kw = dict(hidden=args.hidden, temporal=args.temporal, joint_emb=args.joint_emb)
     rh = getattr(args, "residual_hidden", 0)
     model = ResidualFusion(residual_hidden=rh, **kw) if rh > 0 else LearnedFusion(**kw)
@@ -205,7 +337,10 @@ def cmd_train(args) -> None:
         for step in range(1, args.steps + 1):
             batch = augment_batch(train_store.sample_windows(rng, args.batch, args.window), args.augment_prob, rng)
             pred, _ = model(batch["view_pose"], batch["view_conf"])
-            loss = masked_loss(pred, batch["gt_pose"], batch["gt_valid"])
+            if getattr(model, "last_logscale", None) is not None:
+                loss = masked_laplace_nll(pred, batch["gt_pose"], batch["gt_valid"], model.last_logscale)
+            else:
+                loss = masked_loss(pred, batch["gt_pose"], batch["gt_valid"])
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -219,6 +354,7 @@ def cmd_train(args) -> None:
         # fixed-step model (no selection on the evaluation fold)
         rows, wmean = learned_rows(model, val_store, args.pck)
         agg = summarize(rows)
+        agg["groups"] = group_mpjpe(rows)
         anchors = training_free_rows(val_store, args.pck)
 
         out = fold_dir(args, fold)
@@ -228,6 +364,7 @@ def cmd_train(args) -> None:
             "fold": fold, "params": n_params, "steps": args.steps, "train_seconds": time.time() - t0,
             "config": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items() if k != "func"},
             "learned_last": agg,
+            "uncertainty_calibration": uncertainty_calibration(model, val_store),
             "learned_best_val_for_reference": best,
             "mean_view_weights": dict(zip(VIEWS, wmean.tolist())),
             "training_free": anchors,
@@ -371,10 +508,30 @@ def cmd_summarize(args) -> None:
             t["mpjpe"].append(agg["mpjpe_m"])
             t["pa"].append(agg["pa_mpjpe_m"])
             t["pck10"].append(agg["pck"].get("0.10", float("nan")))
+    groups: dict[str, dict[str, list]] = {}
+    calib = []
+    for f in folds:
+        r = json.loads((base / f"fold{f}" / "result.json").read_text())
+        rows = dict(r["training_free"])
+        rows["learned (fixed steps)"] = r["learned_last"]
+        for name, agg in rows.items():
+            if "groups" in agg:
+                g = groups.setdefault(name, {k: [] for k in JOINT_GROUPS})
+                for k in JOINT_GROUPS:
+                    g[k].append(agg["groups"].get(k, float("nan")))
+        if r.get("uncertainty_calibration"):
+            calib.append(r["uncertainty_calibration"])
     lines = [f"folds: {folds}", "", "| method | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |", "|---|---|---|---|"]
     for name, t in table.items():
         f = lambda v: f"{np.mean(v):.4f} ± {np.std(v):.4f}"
         lines.append(f"| {name} | {f(t['mpjpe'])} | {f(t['pa'])} | {f(t['pck10'])} |")
+    if groups:
+        lines += ["", "| method | head | shoulders/neck | body | hands |", "|---|---|---|---|---|"]
+        for name, g in groups.items():
+            lines.append(f"| {name} | " + " | ".join(f"{np.nanmean(g[k]):.4f}" for k in JOINT_GROUPS) + " |")
+    if calib:
+        lines += ["", f"uncertainty calibration (mean over folds): spearman(scale, error)={np.mean([c['spearman_scale_vs_error'] for c in calib]):.3f}, "
+                  f"error most-confident decile {np.mean([c['err_most_confident_decile'] for c in calib]):.4f} vs least-confident {np.mean([c['err_least_confident_decile'] for c in calib]):.4f} (all {np.mean([c['err_all'] for c in calib]):.4f})"]
     w = np.array(weights)
     lines.append("")
     lines.append(f"learned mean view weights (front/left/right): {np.round(w.mean(0), 3).tolist()} ± {np.round(w.std(0), 3).tolist()}")
@@ -422,6 +579,10 @@ def main() -> None:
     ap.set_defaults(temporal=True)
     ap.add_argument("--uniform-weights", action="store_true", help="ablation: fixed uniform view weights (temporal head only)")
     ap.add_argument("--residual-hidden", type=int, default=0, help=">0: add a per-joint residual refinement MLP of this width")
+    ap.add_argument("--model", choices=("learned", "setfusion"), default="learned")
+    ap.add_argument("--view-layers", type=int, default=2)
+    ap.add_argument("--joint-layers", type=int, default=1)
+    ap.add_argument("--no-uncertainty", action="store_true")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     t = sub.add_parser("train")
