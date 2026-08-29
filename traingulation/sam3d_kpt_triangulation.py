@@ -618,6 +618,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--debug-one", action="store_true", help="Process the first available sequence only.")
     parser.add_argument("--max-frames", type=int, default=None, help="Limit frames per sequence for smoke tests.")
     parser.add_argument("--num-workers", type=int, default=None, help="Override processing.num_workers.")
+    parser.add_argument(
+        "--extrinsics-json",
+        type=Path,
+        default=None,
+        help="Override camera extrinsics with the JSON written by calibrate_extrinsics.py "
+        "(keys: extrinsics.<view>.{R,t,C}). Intrinsics still come from the config.",
+    )
     parser.add_argument("--no-progress", action="store_true", help="Disable tqdm progress bars.")
     return parser.parse_args()
 
@@ -633,6 +640,18 @@ def main() -> None:
     output_root.mkdir(parents=True, exist_ok=True)
 
     k_maps, rt_maps = build_camera_maps(config)
+    if args.extrinsics_json is not None:
+        with open(args.extrinsics_json, "r", encoding="utf-8") as f:
+            ext = json.load(f)["extrinsics"]
+        for view in VIEW_NAMES:
+            if view not in ext:
+                raise KeyError(f"Extrinsics JSON is missing view {view!r}")
+            rt_maps[view] = {
+                "R": np.asarray(ext[view]["R"], dtype=np.float64),
+                "t": np.asarray(ext[view]["t"], dtype=np.float64),
+                "C": np.asarray(ext[view]["C"], dtype=np.float64),
+            }
+        LOGGER.info("Loaded optimized extrinsics from %s", args.extrinsics_json)
 
     if args.person_id or args.env_name:
         if not (args.person_id and args.env_name):
