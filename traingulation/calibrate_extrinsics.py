@@ -1,19 +1,34 @@
 """Optimize front/right camera extrinsics against SAM3D 2D observations.
 
 Gauge: left camera fixed at its constructed pose; scale pinned by a soft
-baseline-length constraint. Effect is measured on held-out frames with the
-production best_subset triangulation (same config as GT generation).
+baseline-length constraint (physical prior). Two modes:
+
+  global        one set of extrinsics fitted on frames spread over every 3rd
+                subject (original experiment; writes optimized_extrinsics.json)
+  --per-sequence
+                one set per (person, env) sequence, fitted on that sequence's
+                own frames; writes <out-dir>/<person>_<env>.json plus a
+                per-sequence sanity report (held-out reprojection error before
+                and after, and the triangulated shoulder width, which should
+                be ~0.37 m for an adult; the constructed extrinsics gave
+                0.46-2.10 m because the rig moved between sessions).
+
+Effect is always measured on held-out frames with the production best_subset
+triangulation (same config as GT generation).
 """
+import argparse
 import json
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
 
-TRI_DIR = Path("/work/1/SKIING/chenkaixu/code/TriFusion/.claude/worktrees/review-fixes/traingulation")
+TRI_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TRI_DIR))
+sys.path.insert(0, str(TRI_DIR.parent / "TriPoseFusion"))
 from sam3d_kpt_triangulation import (  # noqa: E402
     VIEW_NAMES,
     build_camera_maps,
@@ -26,10 +41,11 @@ from sam3d_kpt_triangulation import (  # noqa: E402
     valid_observation,
     view_size_maps,
 )
+from map_config import KEEP_KEYPOINT_INDICES  # noqa: E402
 
 CFG = load_config(TRI_DIR / "triangulation.yaml")
 DATA_ROOT = Path("/work/1/SKIING/chenkaixu/data/drive/sam3d_body_results_right")
-OUT_JSON = Path("/home/SKIING/chenkaixu/.claude/jobs/ac1f81c6/tmp/optimized_extrinsics.json")
+OUT_JSON = TRI_DIR / "optimized_extrinsics.json"
 
 TRI_CFG = CFG["triangulation"]
 KEYPOINT_SIZES = view_size_maps(TRI_CFG["keypoint_image_size"])
@@ -39,6 +55,7 @@ MARGIN = float(TRI_CFG.get("valid_margin_px", 8.0))
 MAX_RPE = float(TRI_CFG.get("max_reproj_error_px", 40.0))
 MIN_VIEWS = int(TRI_CFG.get("min_views", 2))
 BASELINE = float(CFG["camera_position"]["baseline"])
+L_SHO, R_SHO = KEEP_KEYPOINT_INDICES[5], KEEP_KEYPOINT_INDICES[6]  # 70-joint space
 
 K_MAPS, RT0 = build_camera_maps(CFG)
 rng = np.random.default_rng(0)
@@ -54,23 +71,30 @@ def load_frame_points(seq_dir: Path, frame_maps, frame_name):
     return pts
 
 
+def sequence_entries(env_dir: Path, n_frames: int):
+    """Evenly spaced frames of one sequence, interleaved into calib / holdout."""
+    frame_maps = {v: collect_frame_map(env_dir / v) for v in VIEW_NAMES}
+    if any(not m for m in frame_maps.values()):
+        return [], []
+    common = sorted(set.intersection(*(set(m.keys()) for m in frame_maps.values())))
+    step = max(1, len(common) // n_frames)
+    picked = common[::step][:n_frames]
+    calib, holdout = [], []
+    for i, fid in enumerate(picked):
+        (calib if i % 2 == 0 else holdout).append((env_dir, frame_maps, fid))
+    return calib, holdout
+
+
 def sample_frames():
-    """Interleave calib/holdout frames across a spread of sequences."""
+    """Global mode: interleave calib/holdout frames across every 3rd subject."""
     calib, holdout = [], []
     subjects = sorted(p.name for p in DATA_ROOT.iterdir() if p.is_dir())
-    for subject in subjects[::3]:  # every 3rd subject for coverage
+    for subject in subjects[::3]:
         for env_dir in sorted((DATA_ROOT / subject).iterdir()):
-            if not env_dir.is_dir():
-                continue
-            frame_maps = {v: collect_frame_map(env_dir / v) for v in VIEW_NAMES}
-            if any(not m for m in frame_maps.values()):
-                continue
-            common = sorted(set.intersection(*(set(m.keys()) for m in frame_maps.values())))
-            step = max(1, len(common) // 40)
-            picked = common[::step][:40]
-            for i, fid in enumerate(picked):
-                entry = (env_dir, frame_maps, fid)
-                (calib if i % 2 == 0 else holdout).append(entry)
+            if env_dir.is_dir():
+                c, h = sequence_entries(env_dir, 40)
+                calib += c
+                holdout += h
     return calib, holdout
 
 
@@ -90,7 +114,7 @@ def collect_observations(entries):
                 if valid_observation(pt, IMAGE_SIZES[view], MARGIN, True):
                     arr[k, vi] = pt[:2]
         rows.append(arr)
-    return np.concatenate(rows, axis=0)
+    return np.concatenate(rows, axis=0) if rows else np.zeros((0, 3, 2))
 
 
 def make_rt(params):
@@ -110,23 +134,14 @@ def batched_residuals(params, pts2d):
     rt = make_rt(params)
     p_mats = {v: build_projection(K_MAPS[v], rt[v]) for v in VIEW_NAMES}
     obs_mask = np.isfinite(pts2d[..., 0])
-    n_obs_total = int(obs_mask.sum())
-    res = np.zeros(n_obs_total * 2)
-    offset_map = np.zeros(pts2d.shape[:2], dtype=np.int64) - 1
-    flat_index = 0
-    for k in range(pts2d.shape[0]):
-        pass  # offsets assigned per-group below
+    res = np.zeros(int(obs_mask.sum()) * 2)
 
-    # group points by view-combination
     combos = {}
     for idx in range(pts2d.shape[0]):
         key = tuple(np.nonzero(obs_mask[idx])[0].tolist())
         if len(key) >= 2:
             combos.setdefault(key, []).append(idx)
-
-    # observation ordering: row-major over (point, observed view)
-    obs_offsets = np.cumsum(obs_mask.sum(axis=1))
-    starts = np.concatenate([[0], obs_offsets[:-1]])
+    starts = np.concatenate([[0], np.cumsum(obs_mask.sum(axis=1))[:-1]])
 
     for key, idx_list in combos.items():
         idx_arr = np.asarray(idx_list)
@@ -150,22 +165,39 @@ def batched_residuals(params, pts2d):
             uv = uvw[:, :2] / np.where(np.abs(uvw[:, 2:]) > 1e-9, uvw[:, 2:], 1.0)
             r = uv - obs[:, j]
             r = np.where(ok[:, None], r, 50.0)
-            local_j = [list(key).index(kk) for kk in key]  # identity; kept for clarity
             pos = starts[idx_arr] + j
             res[pos * 2] = r[:, 0]
             res[pos * 2 + 1] = r[:, 1]
 
-    # gauge/regularization residuals
     c_l = RT0["left"]["C"]
-    c_r = make_rt(params)["right"]["C"]
+    c_r = rt["right"]["C"]
     bl_res = (np.linalg.norm(c_r - c_l) - BASELINE) * 2000.0  # 1 mm = 2 px
     prior = params * 20.0  # weak prior: 0.05 rad or 5 cm = 1 px
     return np.concatenate([res, [bl_res], prior])
 
 
-def pipeline_metrics(entries, rt_maps, label):
+def calibrate_points(pts2d: np.ndarray, max_points: int = 8000):
+    """Two-round robust least squares; returns 12 params."""
+    keep = np.isfinite(pts2d[..., 0]).sum(axis=1) >= 2
+    pts2d = pts2d[keep]
+    if pts2d.shape[0] > max_points:
+        pts2d = pts2d[rng.choice(pts2d.shape[0], max_points, replace=False)]
+    r1 = least_squares(batched_residuals, np.zeros(12), args=(pts2d,), loss="huber", f_scale=5.0, max_nfev=400)
+    res1 = batched_residuals(r1.x, pts2d)[:-13].reshape(-1, 2)
+    obs_err = np.linalg.norm(res1, axis=1)
+    obs_mask = np.isfinite(pts2d[..., 0])
+    starts = np.concatenate([[0], np.cumsum(obs_mask.sum(axis=1))[:-1]])
+    per_pt_err = np.array([obs_err[starts[i] : starts[i] + int(obs_mask[i].sum())].mean() for i in range(pts2d.shape[0])])
+    pts2d_f = pts2d[per_pt_err < 30.0]
+    r2 = least_squares(batched_residuals, r1.x, args=(pts2d_f,), loss="huber", f_scale=3.0, max_nfev=400)
+    return r2.x, int(pts2d.shape[0]), int(pts2d_f.shape[0])
+
+
+def evaluate_rt(entries, rt_maps) -> dict:
+    """Production best_subset triangulation on entries; reprojection stats + shoulder width."""
     p_maps = {v: build_projection(K_MAPS[v], rt_maps[v]) for v in VIEW_NAMES}
-    stats = {"n_valid": 0, "n_total": 0, "errs": [], "front_used": 0}
+    n_valid = n_total = front_used = 0
+    errs, widths = [], []
     for env_dir, frame_maps, fid in entries:
         try:
             pts = load_frame_points(env_dir, frame_maps, fid)
@@ -176,71 +208,117 @@ def pipeline_metrics(entries, rt_maps, label):
             triangulation_strategy="best_subset", min_views=MIN_VIEWS,
         )
         kpts3d, valid, rpe, rpe_view = out[0], out[1], out[2], out[3]
-        stats["n_total"] += int(valid.shape[0])
-        stats["n_valid"] += int(valid.sum())
-        stats["errs"].extend(rpe[valid].tolist())
-        stats["front_used"] += int(np.isfinite(rpe_view[valid, 0]).sum())
-    errs = np.asarray(stats["errs"])
-    print(
-        f"[{label}] valid_ratio={stats['n_valid']/max(stats['n_total'],1):.3f} "
-        f"mean_rpe={errs.mean():.2f}px median={np.median(errs):.2f}px "
-        f"p95={np.percentile(errs,95):.2f}px "
-        f"front_coverage={stats['front_used']/max(stats['n_valid'],1):.3f} "
-        f"(valid={stats['n_valid']:,}/{stats['n_total']:,})"
-    )
+        n_total += int(valid.shape[0])
+        n_valid += int(valid.sum())
+        errs.extend(rpe[valid].tolist())
+        front_used += int(np.isfinite(rpe_view[valid, 0]).sum())
+        if valid[L_SHO] and valid[R_SHO]:
+            widths.append(float(np.linalg.norm(kpts3d[L_SHO] - kpts3d[R_SHO])))
+    errs = np.asarray(errs)
+    return {
+        "valid_ratio": n_valid / max(n_total, 1),
+        "mean_rpe": float(errs.mean()) if errs.size else float("nan"),
+        "median_rpe": float(np.median(errs)) if errs.size else float("nan"),
+        "p95_rpe": float(np.percentile(errs, 95)) if errs.size else float("nan"),
+        "front_coverage": front_used / max(n_valid, 1),
+        "shoulder_width_m": float(np.median(widths)) if widths else float("nan"),
+        "n_valid": n_valid,
+    }
 
 
-def main():
+def rt_to_json(rt):
+    return {v: {"R": rt[v]["R"].tolist(), "t": rt[v]["t"].tolist(), "C": np.asarray(rt[v]["C"]).tolist()} for v in VIEW_NAMES}
+
+
+def geometry_report(params):
+    rt_new = make_rt(params)
+    rep = {}
+    for view in ("front", "right"):
+        w = params[(0 if view == "front" else 1) * 6 :][:3]
+        rep[view] = {
+            "rot_delta_deg": float(np.degrees(np.linalg.norm(w))),
+            "moved_cm": float(np.linalg.norm(rt_new[view]["C"] - RT0[view]["C"]) * 100),
+        }
+    rep["baseline_m"] = float(np.linalg.norm(rt_new["right"]["C"] - RT0["left"]["C"]))
+    return rep
+
+
+# ---------------------------------------------------------------- per-sequence
+
+
+def run_sequence(task):
+    env_dir, out_path, n_frames = task
+    person, env = env_dir.parent.name, env_dir.name
+    calib, holdout = sequence_entries(env_dir, n_frames)
+    if not calib:
+        return f"{person}/{env}: no frames"
+    pts2d = collect_observations(calib)
+    params, n_pts, n_inl = calibrate_points(pts2d)
+    rt_new = make_rt(params)
+    before = evaluate_rt(holdout, RT0)
+    after = evaluate_rt(holdout, rt_new)
+    payload = {
+        "person": person, "env": env, "params": params.tolist(), "n_points": n_pts, "n_inliers": n_inl,
+        "geometry": geometry_report(params), "holdout_before": before, "holdout_after": after,
+        "extrinsics": rt_to_json(rt_new),
+    }
+    out_path.write_text(json.dumps(payload, indent=1, ensure_ascii=False))
+    return (f"{person}/{env}: rpe {before['mean_rpe']:.2f}->{after['mean_rpe']:.2f}px  "
+            f"shoulder {before['shoulder_width_m']:.3f}->{after['shoulder_width_m']:.3f}m  "
+            f"front_cov {before['front_coverage']:.2f}->{after['front_coverage']:.2f}")
+
+
+def main_per_sequence(args):
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    tasks = []
+    for subject in sorted(p for p in DATA_ROOT.iterdir() if p.is_dir()):
+        for env_dir in sorted(p for p in subject.iterdir() if p.is_dir()):
+            out_path = args.out_dir / f"{subject.name}_{env_dir.name}.json"
+            if out_path.exists() and not args.overwrite:
+                continue
+            tasks.append((env_dir, out_path, args.frames))
+    print(f"{len(tasks)} sequences to calibrate with {args.workers} workers", flush=True)
+    with ProcessPoolExecutor(max_workers=args.workers) as ex:
+        for msg in ex.map(run_sequence, tasks):
+            print(msg, flush=True)
+    # summary
+    rows = [json.loads(p.read_text()) for p in sorted(args.out_dir.glob("*.json"))]
+    sw_b = np.array([r["holdout_before"]["shoulder_width_m"] for r in rows])
+    sw_a = np.array([r["holdout_after"]["shoulder_width_m"] for r in rows])
+    rpe_b = np.array([r["holdout_before"]["mean_rpe"] for r in rows])
+    rpe_a = np.array([r["holdout_after"]["mean_rpe"] for r in rows])
+    print(f"\n{len(rows)} sequences | shoulder width: before median {np.nanmedian(sw_b):.3f} (std {np.nanstd(sw_b):.3f}) "
+          f"-> after median {np.nanmedian(sw_a):.3f} (std {np.nanstd(sw_a):.3f}) | "
+          f"mean rpe: {np.nanmean(rpe_b):.2f} -> {np.nanmean(rpe_a):.2f} px")
+
+
+def main_global():
     calib_entries, holdout_entries = sample_frames()
     print(f"calib frames={len(calib_entries)} holdout frames={len(holdout_entries)}")
     pts2d = collect_observations(calib_entries)
-    keep = np.isfinite(pts2d[..., 0]).sum(axis=1) >= 2
-    pts2d = pts2d[keep]
-    if pts2d.shape[0] > 8000:
-        pts2d = pts2d[rng.choice(pts2d.shape[0], 8000, replace=False)]
-    print(f"calibration points={pts2d.shape[0]}")
+    params, n_pts, n_inl = calibrate_points(pts2d)
+    print(f"calibration points={n_pts} inliers(round2)={n_inl}")
+    rt_new = make_rt(params)
+    print("--- optimized geometry ---", json.dumps(geometry_report(params), indent=1))
+    print("--- held-out frames, production best_subset triangulation ---")
+    for label, rt in (("original", RT0), ("optimized", rt_new)):
+        print(f"[{label}] {json.dumps(evaluate_rt(holdout_entries, rt))}")
+    OUT_JSON.write_text(json.dumps({"params": params.tolist(), "extrinsics": rt_to_json(rt_new)}, indent=1))
+    print(f"saved optimized extrinsics to {OUT_JSON}")
 
-    x0 = np.zeros(12)
-    print("round 1 (huber f_scale=5)...")
-    r1 = least_squares(batched_residuals, x0, args=(pts2d,), loss="huber", f_scale=5.0, max_nfev=400)
-    # outlier rejection against round-1 model, then refine
-    res1 = batched_residuals(r1.x, pts2d)[:-13].reshape(-1, 2)
-    obs_err = np.linalg.norm(res1, axis=1)
-    obs_mask = np.isfinite(pts2d[..., 0])
-    per_pt_err = np.full(pts2d.shape[0], 0.0)
-    starts = np.concatenate([[0], np.cumsum(obs_mask.sum(axis=1))[:-1]])
-    for i in range(pts2d.shape[0]):
-        n_o = int(obs_mask[i].sum())
-        per_pt_err[i] = obs_err[starts[i] : starts[i] + n_o].mean()
-    keep2 = per_pt_err < 30.0
-    pts2d_f = pts2d[keep2]
-    print(f"round 2 on {pts2d_f.shape[0]} inlier points...")
-    r2 = least_squares(batched_residuals, r1.x, args=(pts2d_f,), loss="huber", f_scale=3.0, max_nfev=400)
 
-    rt_new = make_rt(r2.x)
-    print("\n--- optimized geometry ---")
-    for view in ("front", "right"):
-        w = r2.x[(0 if view == "front" else 1) * 6 :][:3]
-        c0, c1 = RT0[view]["C"], rt_new[view]["C"]
-        print(
-            f"{view}: rot_delta={np.degrees(np.linalg.norm(w)):.2f}deg "
-            f"C {np.round(c0,3).tolist()} -> {np.round(c1,3).tolist()} "
-            f"(moved {np.linalg.norm(c1-c0)*100:.1f} cm)"
-        )
-    print(f"baseline: {np.linalg.norm(rt_new['right']['C']-RT0['left']['C']):.4f} m (target {BASELINE})")
-
-    print("\n--- held-out frames, production best_subset triangulation ---")
-    pipeline_metrics(holdout_entries, RT0, "original extrinsics")
-    pipeline_metrics(holdout_entries, rt_new, "optimized extrinsics")
-
-    OUT_JSON.write_text(json.dumps({
-        "params": r2.x.tolist(),
-        "extrinsics": {
-            v: {"R": rt_new[v]["R"].tolist(), "t": rt_new[v]["t"].tolist(), "C": np.asarray(rt_new[v]["C"]).tolist()}
-            for v in VIEW_NAMES
-        },
-    }, indent=1))
-    print(f"\nsaved optimized extrinsics to {OUT_JSON}")
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--per-sequence", action="store_true")
+    ap.add_argument("--out-dir", type=Path, default=TRI_DIR / "optimized_extrinsics_per_sequence")
+    ap.add_argument("--frames", type=int, default=80, help="frames sampled per sequence (half calib, half holdout)")
+    ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--overwrite", action="store_true")
+    args = ap.parse_args()
+    if args.per_sequence:
+        main_per_sequence(args)
+    else:
+        main_global()
 
 
 if __name__ == "__main__":

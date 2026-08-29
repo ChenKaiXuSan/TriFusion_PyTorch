@@ -103,8 +103,41 @@ def learned_rows(model: LearnedFusion, store: SeqStore, pck, corrupt=None) -> tu
     return rows, wsum / max(wn, 1)
 
 
+class _ZeroHead(torch.nn.Module):
+    """Replaces weight_mlp: constant logits -> uniform softmax over finite views."""
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x.new_zeros(x.shape[:-1] + (1,))
+
+
 def build_model(args) -> LearnedFusion:
-    return LearnedFusion(hidden=args.hidden, temporal=args.temporal, joint_emb=args.joint_emb)
+    model = LearnedFusion(hidden=args.hidden, temporal=args.temporal, joint_emb=args.joint_emb)
+    if getattr(args, "uniform_weights", False):
+        model.weight_mlp = _ZeroHead()
+        model.joint_emb = None
+    return model
+
+
+def augment_batch(batch: dict, prob: float, rng: np.random.Generator) -> dict:
+    """Training-time view corruption: with prob per sample, corrupt one random view
+    (drop -> NaN, zero, or noise sigma=0.1 m) so the gate can learn to detect it."""
+    if prob <= 0:
+        return batch
+    vp = batch["view_pose"].clone()
+    for i in range(vp.shape[0]):
+        if rng.random() >= prob:
+            continue
+        v = int(rng.integers(vp.shape[3]))
+        mode = ("drop", "zero", "noise")[int(rng.integers(3))]
+        if mode == "drop":
+            vp[i, :, :, v] = float("nan")
+        elif mode == "zero":
+            vp[i, :, :, v] = 0.0
+        else:
+            vp[i, :, :, v] = vp[i, :, :, v] + 0.1 * torch.randn_like(vp[i, :, :, v])
+    out = dict(batch)
+    out["view_pose"] = vp
+    return out
 
 
 def fold_dir(args, fold: int) -> Path:
@@ -136,7 +169,7 @@ def cmd_train(args) -> None:
         history, best = [], None
         t0 = time.time()
         for step in range(1, args.steps + 1):
-            batch = train_store.sample_windows(rng, args.batch, args.window)
+            batch = augment_batch(train_store.sample_windows(rng, args.batch, args.window), args.augment_prob, rng)
             pred, _ = model(batch["view_pose"], batch["view_conf"])
             loss = masked_loss(pred, batch["gt_pose"], batch["gt_valid"])
             opt.zero_grad()
@@ -353,10 +386,12 @@ def main() -> None:
     ap.add_argument("--joint-emb", type=int, default=8)
     ap.add_argument("--no-temporal", dest="temporal", action="store_false")
     ap.set_defaults(temporal=True)
+    ap.add_argument("--uniform-weights", action="store_true", help="ablation: fixed uniform view weights (temporal head only)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     t = sub.add_parser("train")
     t.add_argument("--folds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
+    t.add_argument("--augment-prob", type=float, default=0.0, help="per-sample prob of corrupting one random view during training")
     t.add_argument("--steps", type=int, default=3000)
     t.add_argument("--batch", type=int, default=32)
     t.add_argument("--window", type=int, default=64)
