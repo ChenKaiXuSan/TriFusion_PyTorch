@@ -40,9 +40,69 @@ for p in (str(SCRIPT_DIR), str(REPO_ROOT)):
         sys.path.insert(0, p)
 
 from eval_fusion_baselines_pesudo_gt import canonicalize_pose, compute_metrics, fuse_views  # noqa: E402
-from learned_fusion_baseline import LearnedFusion, SeqStore, load_fold_pairs, masked_loss, summarize  # noqa: E402
+from learned_fusion_baseline import LearnedFusion, load_fold_pairs, masked_loss, summarize  # noqa: E402
+from learned_fusion_baseline import SeqStore as _BaseSeqStore  # noqa: E402
 
 VIEWS = ("front", "left", "right")
+
+
+class _Seq(dict):
+    """Sequence record that keeps float arrays resident in fp16 and casts to fp32 on
+    access. The login node caps the user cgroup at 16 GiB; fp32-resident stores were
+    3.3 GB per process and concurrent folds were OOM-killed."""
+
+    _F16 = ("view_pose", "view_conf", "gt_pose")
+
+    def __getitem__(self, k):
+        if k in self._F16:
+            return dict.__getitem__(self, k + "16").astype(np.float32)
+        return dict.__getitem__(self, k)
+
+    def raw(self, k):
+        return dict.__getitem__(self, k + "16")
+
+
+class SeqStore(_BaseSeqStore):
+    """fp16-resident drop-in for the baseline SeqStore (same sampling RNG order)."""
+
+    def __init__(self, cache_dir: Path, pairs: list) -> None:
+        self.seqs = []
+        missing = []
+        for person, env in pairs:
+            p = Path(cache_dir) / f"{person}_{env}.npz"
+            if not p.exists():
+                missing.append(p.name)
+                continue
+            with np.load(p, allow_pickle=False) as z:
+                self.seqs.append(_Seq(
+                    person=person, env=env,
+                    view_pose16=z["view_pose"].astype(np.float16),
+                    view_conf16=z["view_conf"].astype(np.float16),
+                    gt_pose16=z["gt_pose"].astype(np.float16),
+                    gt_valid=z["gt_valid"].astype(bool),
+                ))
+        if missing:
+            print(f"WARNING: {len(missing)} cache files missing: {missing[:4]} ...")
+        if not self.seqs:
+            raise SystemExit("no cached sequences loaded")
+
+    def sample_windows(self, rng: np.random.Generator, batch: int, window: int) -> dict:
+        vp, vc, gp, gv = [], [], [], []
+        for _ in range(batch):
+            s = self.seqs[rng.integers(len(self.seqs))]
+            t_total = s.raw("view_pose").shape[0]
+            t0 = int(rng.integers(0, max(t_total - window, 1)))
+            sl = slice(t0, t0 + window)
+            vp.append(s.raw("view_pose")[sl].astype(np.float32))
+            vc.append(s.raw("view_conf")[sl].astype(np.float32))
+            gp.append(s.raw("gt_pose")[sl].astype(np.float32))
+            gv.append(s["gt_valid"][sl])
+        return {
+            "view_pose": torch.from_numpy(np.stack(vp)),
+            "view_conf": torch.from_numpy(np.stack(vc)),
+            "gt_pose": torch.from_numpy(np.stack(gp)),
+            "gt_valid": torch.from_numpy(np.stack(gv)),
+        }
 DEFAULT_CACHE = Path("/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache")
 DEFAULT_INDEX = Path("/work/1/SKIING/chenkaixu/data/drive/index_mapping")
 DEFAULT_DA_ROOT = Path("/work/1/SKIING/chenkaixu/data/drive/driveandact/tripose_eval_dense")
