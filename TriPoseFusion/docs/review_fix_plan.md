@@ -136,6 +136,24 @@ front P95 42.05 vs 42.03 px）下的 Table 3 基线行（全 88 序列，canonic
   `traingulation/optimized_extrinsics.json`，尚未用于重生成 GT——可作"GT 稳健性
   分析"：用优化外参重生成 GT 后重跑关键行，证明结论对 GT 质量不敏感（回应 19jf/xS2o）。
 
+## 二·七、作者决定（2026-08-29）
+
+1. **伪 GT 表述**：保留论文 "manually checked and corrected" 表述。口径：人工修正作用于
+   三角化脚本的**输入**（`sam3d_body_results_right` 中的 SAM3D 2D 结果），
+   `sam3d_kpt_triangulation.py` 本身不含修正步骤。rebuttal_draft §0 的"须作者确认"
+   提醒可按此关闭；F 点外参优化仍定位为 GT 稳健性分析而非新 GT。
+2. **学习型基线数字**：以统一口径定稿表为准——**MPJPE 0.8561 / PA 0.3280 / PCK@0.10
+   0.202**（`TriFusion_fast/logs/table3_unified_fold0/table3_unified.json`，seq_mean，
+   robust=True，n=20；fold_agg 0.8156/0.3085；分组 head 0.325 / 肩颈 0.237 / body 0.281 /
+   hands 1.351）。rebuttal_draft E 点正文与进度表中的 0.981/0.290/0.152 来自
+   `learned_fusion_baseline.py` 脚本内部评估（其锚点 mean 1.059/0.336 与统一口径
+   0.9945/0.3695 不符，且引用的 `learned_fusion_fold0.json` 不在磁盘），需改为统一口径
+   数字并标注 "pseudo-GT supervised"。
+3. **外参优化版 GT 稳健性分析**：进行中。`sam3d_kpt_triangulation.py --extrinsics-json`
+   已支持覆盖；冒烟（01/夜多い 前 50 帧）mean_rpe 12.29→2.48 px。全量输出至
+   `/work/1/SKIING/chenkaixu/data/drive/sam3d_body_triangulated_gt_optext`，随后重跑
+   mean/median/单视角基线与旧 ckpt 模型行，与旧 GT 结果并列（结果见二·八）。
+
 ## 三、rebuttal 各点回应策略
 
 - **A（LAYQ：PA>MPJPE 反常）**：如实说明发现的对齐实现缺陷 + 给修正数字 +
