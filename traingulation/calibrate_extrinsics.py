@@ -292,6 +292,73 @@ def main_per_sequence(args):
           f"mean rpe: {np.nanmean(rpe_b):.2f} -> {np.nanmean(rpe_a):.2f} px")
 
 
+def sam3d_shoulder_width(entries) -> float:
+    """Median SAM3D metric shoulder width (pred_keypoints_3d) over frames and views."""
+    widths = []
+    for _env_dir, frame_maps, fid in entries:
+        for view in VIEW_NAMES:
+            with np.load(frame_maps[view][fid], allow_pickle=True) as obj:
+                k3 = np.asarray(obj["output"].item()["pred_keypoints_3d"], dtype=np.float64)
+            if k3.shape[0] > max(L_SHO, R_SHO):
+                widths.append(float(np.linalg.norm(k3[L_SHO] - k3[R_SHO])))
+    return float(np.median(widths)) if widths else float("nan")
+
+
+def scale_rt(rt, s: float):
+    """Scale the scene about the (fixed) left camera centre; reprojections are invariant."""
+    c_l = np.asarray(rt["left"]["C"], dtype=np.float64)
+    out = {"left": rt["left"]}
+    for view in ("front", "right"):
+        r = np.asarray(rt[view]["R"], dtype=np.float64)
+        c = c_l + s * (np.asarray(rt[view]["C"], dtype=np.float64) - c_l)
+        out[view] = {"R": r, "t": -r @ c, "C": c}
+    return out
+
+
+def anchor_sequence(task):
+    """Post-process one per-sequence JSON: set the metric scale (a gauge freedom of
+    uncalibrated multi-view geometry) so the triangulated shoulder width matches the
+    monocular estimator's body scale for that sequence."""
+    json_path, n_frames = task
+    payload = json.loads(json_path.read_text())
+    env_dir = DATA_ROOT / payload["person"] / payload["env"]
+    calib, holdout = sequence_entries(env_dir, n_frames)
+    entries = calib + holdout
+    rt = {v: {k: np.asarray(x, dtype=np.float64) for k, x in payload["extrinsics"][v].items()} for v in VIEW_NAMES}
+    w_sam = sam3d_shoulder_width(entries)
+    w_tri = evaluate_rt(entries, rt)["shoulder_width_m"]
+    if not (np.isfinite(w_sam) and np.isfinite(w_tri) and w_tri > 0):
+        return f"{payload['person']}/{payload['env']}: cannot anchor (sam {w_sam}, tri {w_tri})"
+    s = w_sam / w_tri
+    rt_s = scale_rt(rt, s)
+    after = evaluate_rt(holdout, rt_s)
+    payload["scale_anchor"] = {"sam3d_shoulder_m": w_sam, "triangulated_shoulder_m_before": w_tri, "factor": s}
+    payload["holdout_after_unanchored"] = payload.get("holdout_after")
+    payload["holdout_after"] = after
+    payload["extrinsics"] = rt_to_json(rt_s)
+    payload["geometry"]["baseline_m"] = float(np.linalg.norm(rt_s["right"]["C"] - rt_s["left"]["C"]))
+    json_path.write_text(json.dumps(payload, indent=1, ensure_ascii=False))
+    return (f"{payload['person']}/{payload['env']}: scale x{s:.3f} shoulder {w_tri:.3f}->{after['shoulder_width_m']:.3f} "
+            f"(sam3d {w_sam:.3f}) rpe {after['mean_rpe']:.2f}px baseline {payload['geometry']['baseline_m']:.3f}m")
+
+
+def main_anchor(args):
+    tasks = [(p, args.frames) for p in sorted(args.out_dir.glob("*.json"))
+             if args.overwrite or "scale_anchor" not in json.loads(p.read_text())]
+    print(f"{len(tasks)} sequences to scale-anchor with {args.workers} workers", flush=True)
+    with ProcessPoolExecutor(max_workers=args.workers) as ex:
+        for msg in ex.map(anchor_sequence, tasks):
+            print(msg, flush=True)
+    rows = [json.loads(p.read_text()) for p in sorted(args.out_dir.glob("*.json"))]
+    sw = np.array([r["holdout_after"]["shoulder_width_m"] for r in rows])
+    sam = np.array([r.get("scale_anchor", {}).get("sam3d_shoulder_m", np.nan) for r in rows])
+    rpe = np.array([r["holdout_after"]["mean_rpe"] for r in rows])
+    bl = np.array([r["geometry"]["baseline_m"] for r in rows])
+    print(f"\n{len(rows)} sequences | shoulder width after anchoring: median {np.nanmedian(sw):.3f} "
+          f"[{np.nanmin(sw):.3f},{np.nanmax(sw):.3f}] std {np.nanstd(sw):.3f} | sam3d median {np.nanmedian(sam):.3f} | "
+          f"mean rpe {np.nanmean(rpe):.2f} px | implied baseline median {np.nanmedian(bl):.3f} [{np.nanmin(bl):.2f},{np.nanmax(bl):.2f}] m")
+
+
 def main_global():
     calib_entries, holdout_entries = sample_frames()
     print(f"calib frames={len(calib_entries)} holdout frames={len(holdout_entries)}")
@@ -310,12 +377,16 @@ def main_global():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--per-sequence", action="store_true")
+    ap.add_argument("--anchor-scale", action="store_true",
+                    help="post-process per-sequence JSONs in --out-dir: fix the metric scale gauge to the SAM3D body scale")
     ap.add_argument("--out-dir", type=Path, default=TRI_DIR / "optimized_extrinsics_per_sequence")
     ap.add_argument("--frames", type=int, default=80, help="frames sampled per sequence (half calib, half holdout)")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--overwrite", action="store_true")
     args = ap.parse_args()
-    if args.per_sequence:
+    if args.anchor_scale:
+        main_anchor(args)
+    elif args.per_sequence:
         main_per_sequence(args)
     else:
         main_global()
