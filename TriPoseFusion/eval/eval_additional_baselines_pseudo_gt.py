@@ -162,6 +162,8 @@ def evaluate_subject_env(
     gt_pose = gt_pose[gt_indices]
     gt_valid = gt_valid[gt_indices]
 
+    # 注意：上游加载器已做 KEEP 70→52 映射，这里已是 52 关节模型空间，
+    # canonicalize 锚点正确；不要重复做 KEEP 切片。
     n_joints = min(view_pose.shape[1], gt_pose.shape[1])
     view_pose = view_pose[:, :n_joints]
     view_conf = view_conf[:, :n_joints]

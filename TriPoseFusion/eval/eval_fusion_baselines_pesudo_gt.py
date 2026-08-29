@@ -460,6 +460,10 @@ def evaluate_subject_env(
     gt_pose = gt_pose[gt_indices]
     gt_valid = gt_valid[gt_indices]
 
+    # 注意：load_sam3d_frame / load_gt_sequence 已把 70 关节原始布局按
+    # KEEP_KEYPOINT_INDICES 映射到 52 关节模型空间，此处数组即 52 关节，
+    # canonicalize 的锚点 (neck=51, shoulders=5/6) 因此是正确的。
+    # 不要在这里再做 KEEP 切片（会二次映射）。
     n_joints = min(view_pose.shape[1], gt_pose.shape[1])
     view_pose = view_pose[:, :n_joints]
     view_conf = view_conf[:, :n_joints]

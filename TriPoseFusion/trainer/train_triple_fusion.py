@@ -51,14 +51,49 @@ class TriFusionPoseTrainer(LightningModule):
         self.lambda_gate_entropy = float(getattr(cfg, "geofusion_gate_entropy_reg_lambda", 0.0))
         self.info_nce_temperature = float(getattr(cfg, "info_nce_temperature", 0.1))
         self.bones = list(getattr(cfg, "geofusion_bones", []))
+        # Leave-one-view-out self-supervised teacher: mask one view per sample and use
+        # that view's canonicalized observation as the L_tri target (median is the
+        # trivial optimum of the original objective; a held-out view is not).
+        self.loo_teacher = bool(getattr(cfg, "loo_teacher", False))
+        self.loo_prob = float(getattr(cfg, "loo_prob", 1.0))
 
-    def forward(self, batch: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+    def forward(
+        self, batch: Dict[str, Any], view_mask: Optional[torch.Tensor] = None
+    ) -> Dict[str, torch.Tensor]:
         return self.model(
             pose3d=self._get_required(batch, ("kpt3d", "pose3d", "sam3d_kpt", "sam3d_kpt_3d")),
             pose2d=self._get_optional(batch, ("kpt2d", "pose2d", "sam2d_kpt", "sam2d_kpt_2d", "sam3d_kpt_2d")),
             conf2d=self._get_optional(batch, ("conf2d", "kpt2d_conf", "confidence2d")),
             reproj_error=self._get_optional(batch, ("reproj_error", "reprojection_error")),
+            view_mask=view_mask,
         )
+
+    def _batch_size(self, batch: Dict[str, Any]) -> int:
+        pose3d = self._get_required(batch, ("kpt3d", "pose3d", "sam3d_kpt", "sam3d_kpt_3d"))
+        if isinstance(pose3d, dict):
+            pose3d = next(iter(pose3d.values()))
+        return int(pose3d.shape[0])
+
+    def _sample_view_mask(
+        self, bsz: int, stage: str, batch_idx: int, device: torch.device
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return (view_mask (B,V) bool, loo_index (B,) long; -1 = no view held out).
+
+        train: random held-out view per sample (each sample with prob loo_prob);
+        val/test: deterministic (sample + batch_idx) % V so every view is held out
+        equally often and the metric is reproducible.
+        """
+        num_views = len(self.view_names)
+        if stage == "train":
+            loo_index = torch.randint(0, num_views, (bsz,), device=device)
+            keep = torch.rand(bsz, device=device) >= self.loo_prob
+            loo_index = loo_index.masked_fill(keep, -1)
+        else:
+            loo_index = (torch.arange(bsz, device=device) + int(batch_idx)) % num_views
+        view_mask = torch.ones(bsz, num_views, dtype=torch.bool, device=device)
+        rows = torch.nonzero(loo_index >= 0, as_tuple=True)[0]
+        view_mask[rows, loo_index[rows]] = False
+        return view_mask, loo_index
 
     @staticmethod
     def _get_optional(batch: Dict[str, Any], keys: Sequence[str]):
@@ -85,10 +120,38 @@ class TriFusionPoseTrainer(LightningModule):
         if teacher is not None:
             teacher = self.model._to_btjc(teacher, dims=3)
             teacher = self.model._canonicalize_pose(teacher)
-        else:
+            return F.smooth_l1_loss(pred, teacher)
+
+        p_views = out["P_views"].detach()  # (B,T,J,V,3)
+        median = p_views.median(dim=3).values
+        loo_index = out.get("loo_index")
+        if loo_index is None or not bool((loo_index >= 0).any()):
             # No cameras / triangulation teacher: use robust canonical multi-view median.
-            teacher = out["P_views"].detach().median(dim=3).values
-        return F.smooth_l1_loss(pred, teacher)
+            return F.smooth_l1_loss(pred, median)
+
+        # Leave-one-view-out: samples with a held-out view regress that view's
+        # canonicalized observation (not in the input); the rest keep the median.
+        bsz = pred.shape[0]
+        target = p_views[torch.arange(bsz, device=pred.device), :, :, loo_index.clamp_min(0)]
+        sel = loo_index >= 0
+        loss = F.smooth_l1_loss(pred[sel], target[sel], reduction="sum")
+        if bool((~sel).any()):
+            loss = loss + F.smooth_l1_loss(pred[~sel], median[~sel], reduction="sum")
+        return loss / pred.numel()
+
+    @staticmethod
+    def _loo_error(pred: torch.Tensor, out: Dict[str, torch.Tensor]) -> Optional[torch.Tensor]:
+        """Mean L2 distance (m) between the fused pose and the held-out view's
+        canonicalized observation, over held-out samples. Self-supervised proxy
+        for checkpoint selection."""
+        loo_index = out.get("loo_index")
+        if loo_index is None or not bool((loo_index >= 0).any()):
+            return None
+        sel = loo_index >= 0
+        bsz = pred.shape[0]
+        target = out["P_views"].detach()[torch.arange(bsz, device=pred.device), :, :, loo_index.clamp_min(0)]
+        dist = torch.linalg.norm(pred[sel] - target[sel], dim=-1)
+        return dist[torch.isfinite(dist)].mean()
 
     def _view_consistency_loss(self, pred: torch.Tensor, out: Dict[str, torch.Tensor]) -> torch.Tensor:
         diff = torch.linalg.norm(pred.unsqueeze(3) - out["P_views"], dim=-1)
@@ -168,8 +231,16 @@ class TriFusionPoseTrainer(LightningModule):
             losses.append(F.smooth_l1_loss(pred2d, pose2d_views[idx]))
         return torch.stack(losses).mean() if losses else pred.new_zeros(())
 
-    def _losses(self, batch: Dict[str, Any]) -> Dict[str, torch.Tensor]:
-        out = self.forward(batch)
+    def _losses(
+        self, batch: Dict[str, Any], stage: str = "train", batch_idx: int = 0
+    ) -> Dict[str, torch.Tensor]:
+        view_mask = loo_index = None
+        if self.loo_teacher:
+            view_mask, loo_index = self._sample_view_mask(
+                self._batch_size(batch), stage, batch_idx, self.device
+            )
+        out = self.forward(batch, view_mask=view_mask)
+        out["loo_index"] = loo_index
         pred = out["P_final"]
         loss_tri = self._teacher_loss(pred, batch, out)
         loss_reproj = self._reprojection_loss(pred, batch)
@@ -205,12 +276,18 @@ class TriFusionPoseTrainer(LightningModule):
             "loss_gate_entropy": loss_gate_entropy,
             "alpha": out["alpha"],
             "P_final": pred,
+            "loo_mpjpe": self._loo_error(pred, out),
         }
 
-    def _shared_step(self, batch: Dict[str, Any], stage: str) -> torch.Tensor:
-        losses = self._losses(batch)
+    def _shared_step(self, batch: Dict[str, Any], stage: str, batch_idx: int = 0) -> torch.Tensor:
+        losses = self._losses(batch, stage=stage, batch_idx=batch_idx)
         bsz = losses["P_final"].shape[0]
         self.log(f"{stage}/loss", losses["loss"], on_step=stage == "train", on_epoch=True, prog_bar=True, batch_size=bsz)
+        if losses.get("loo_mpjpe") is not None:
+            self.log(
+                f"{stage}/loo_mpjpe", losses["loo_mpjpe"],
+                on_step=False, on_epoch=True, prog_bar=stage != "train", batch_size=bsz,
+            )
         self.log_dict(
             {
                 f"{stage}/loss_tri": losses["loss_tri"],
@@ -235,13 +312,13 @@ class TriFusionPoseTrainer(LightningModule):
         return losses["loss"]
 
     def training_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
-        return self._shared_step(batch, "train")
+        return self._shared_step(batch, "train", batch_idx)
 
     def validation_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
-        return self._shared_step(batch, "val")
+        return self._shared_step(batch, "val", batch_idx)
 
     def test_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
-        return self._shared_step(batch, "test")
+        return self._shared_step(batch, "test", batch_idx)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)

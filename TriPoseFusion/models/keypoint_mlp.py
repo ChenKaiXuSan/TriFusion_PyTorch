@@ -141,11 +141,15 @@ class CrossViewAttention(nn.Module):
         # Each configured view has a learnable position embedding.
         self.view_pos_embed = nn.Parameter(torch.randn(1, 1, self.num_views, embed_dim))
 
-    def forward(self, H_views: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, H_views: torch.Tensor, view_mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """Allow views to communicate with positional context.
 
         Args:
             H_views: (B,T,J,V,H) encoded view features from different cameras
+            view_mask: optional (B,V) bool, True = view available. Masked views are
+                excluded as attention keys (leave-one-view-out self-supervision).
 
         Returns:
             Attended features where each view has incorporated contextual information
@@ -161,8 +165,17 @@ class CrossViewAttention(nn.Module):
         # Reshape to treat views as tokens for attention: (B*T*J, V, H)
         H_reshaped = H_with_pos.reshape(B * T * J, V, H)
 
+        key_padding_mask = None
+        if view_mask is not None:
+            # nn.MultiheadAttention: key_padding_mask True = ignore that key
+            key_padding_mask = (
+                (~view_mask.bool()).unsqueeze(1).expand(B, T * J, V).reshape(B * T * J, V)
+            )
+
         # Multi-head attention among views - each view sees all others with position info
-        attended, _ = self.attention(H_reshaped, H_reshaped, H_reshaped)
+        attended, _ = self.attention(
+            H_reshaped, H_reshaped, H_reshaped, key_padding_mask=key_padding_mask
+        )
 
         # Reshape back to original dimensions for downstream processing
         return attended.reshape(B, T, J, V, H)
@@ -767,8 +780,14 @@ class TriViewKeypointFusionNet(nn.Module):
         pose2d: Optional[KptInput] = None,
         conf2d: Optional[KptInput] = None,
         reproj_error: Optional[KptInput] = None,
+        view_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         """Forward pass through the fusion network.
+
+        view_mask: optional (B,V) bool, True = view available. A masked view's
+        encoded features are zeroed, it is excluded from cross-view attention keys
+        and receives gate weight 0, so the fused pose depends only on the remaining
+        views (its canonicalized pose is still returned in P_views as a target).
 
         Processing steps:
         1. Canonicalize each view's pose to body-centered coordinates (IMPROVEMENT #4)
@@ -794,19 +813,35 @@ class TriViewKeypointFusionNet(nn.Module):
             encoded.append(self.view_encoder(feat))
         hidden = torch.stack(encoded, dim=3)  # Shape: (B,T,J,V,H)
 
+        if view_mask is not None:
+            view_mask = view_mask.to(device=hidden.device, dtype=torch.bool)
+            if view_mask.shape != (hidden.shape[0], self.num_views):
+                raise ValueError(
+                    f"view_mask must be (B,V)=({hidden.shape[0]},{self.num_views}), got {tuple(view_mask.shape)}"
+                )
+            hidden = hidden * view_mask[:, None, None, :, None].to(hidden.dtype)
+
         # IMPROVEMENT #1: Cross-view attention before gating.
         # Can be disabled for ablation with model.geofusion_use_cross_view_attention=false.
-        hidden_attended = self.cross_view_attention(hidden)
+        if isinstance(self.cross_view_attention, CrossViewAttention):
+            hidden_attended = self.cross_view_attention(hidden, view_mask=view_mask)
+        else:
+            hidden_attended = self.cross_view_attention(hidden)
 
         # Step 3: Learn view weights with attended features
         if self.use_learned_gate:
             gate_logits = self.gate_head(hidden_attended).squeeze(-1)  # (B,T,J,V)
+            if view_mask is not None:
+                gate_logits = gate_logits.masked_fill(~view_mask[:, None, None, :], -1e4)
             alpha = F.softmax(gate_logits, dim=-1)  # Joint-wise view weights
         else:
             alpha = hidden_attended.new_full(
                 hidden_attended.shape[:-1],
                 1.0 / float(self.num_views),
             )
+            if view_mask is not None:
+                avail = view_mask[:, None, None, :].to(alpha.dtype).expand_as(alpha)
+                alpha = avail / avail.sum(dim=-1, keepdim=True).clamp_min(1.0)
 
         # IMPROVEMENT #2: Gate regularization for stability (computed but not backprop'd in forward)
         # Entropy regularization to prevent views from being completely ignored
@@ -831,4 +866,5 @@ class TriViewKeypointFusionNet(nn.Module):
             "alpha": alpha,          # View weights for interpretability
             "P_views": pose_stack,   # Canonicalized input poses
             "H_views": hidden_attended,  # Attended view features
+            "view_mask": view_mask,  # (B,V) bool or None
         }

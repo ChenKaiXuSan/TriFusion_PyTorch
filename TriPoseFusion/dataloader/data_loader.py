@@ -19,6 +19,7 @@ class DriverKPTDataModule(LightningDataModule):
         self.num_workers = int(opt.data.num_workers)
         self.batch_size = int(opt.data.batch_size)
         self.target_t = int(opt.data.uniform_temporal_subsample_num)
+        self.kpt_cache_root = opt.paths.get("kpt_cache_root", None)
         self.dataset_idx = dataset_idx
         self.experiment = opt.experiment
 
@@ -35,18 +36,21 @@ class DriverKPTDataModule(LightningDataModule):
             index_mapping=self.dataset_idx["train"],
             view_name=self.view_name,
             target_t=self.target_t,
+            kpt_cache_root=self.kpt_cache_root,
         )
         self.val_gait_dataset = KPTDataset(
             experiment=self.experiment,
             index_mapping=self.dataset_idx["val"],
             view_name=self.view_name,
             target_t=self.target_t,
+            kpt_cache_root=self.kpt_cache_root,
         )
         self.test_gait_dataset = KPTDataset(
             experiment=self.experiment,
             index_mapping=self.dataset_idx["val"],
             view_name=self.view_name,
             target_t=self.target_t,
+            kpt_cache_root=self.kpt_cache_root,
         )
 
     @staticmethod
