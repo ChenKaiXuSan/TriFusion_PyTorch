@@ -103,6 +103,38 @@ def learned_rows(model: LearnedFusion, store: SeqStore, pck, corrupt=None) -> tu
     return rows, wsum / max(wn, 1)
 
 
+class ResidualFusion(LearnedFusion):
+    """LearnedFusion + per-joint residual refinement head: after weighted fusion, an MLP
+    predicts a 3D correction from [fused, per-view canonical coords, per-view disagreement,
+    finite flags, joint embedding]. Tests whether capacity can correct systematic monocular
+    errors (depth, hands) beyond view weighting, under correct pseudo-GT supervision."""
+
+    def __init__(self, residual_hidden: int = 64, **kw) -> None:
+        super().__init__(**kw)
+        emb = self.joint_emb.embedding_dim if self.joint_emb is not None else 0
+        in_dim = 3 + 3 * 3 + 3 + 3 + emb  # fused + 3 views*3 + disagreement + finite + emb
+        self.residual = torch.nn.Sequential(
+            torch.nn.Linear(in_dim, residual_hidden), torch.nn.GELU(),
+            torch.nn.Linear(residual_hidden, residual_hidden), torch.nn.GELU(),
+            torch.nn.Linear(residual_hidden, 3),
+        )
+        torch.nn.init.zeros_(self.residual[-1].weight)
+        torch.nn.init.zeros_(self.residual[-1].bias)
+
+    def forward(self, view_pose: torch.Tensor, view_conf: torch.Tensor):
+        fused, weights = super().forward(view_pose, view_conf)
+        finite = torch.isfinite(view_pose).all(dim=-1)  # (B,T,J,V)
+        pose = torch.nan_to_num(view_pose, nan=0.0)
+        fused0 = torch.nan_to_num(fused, nan=0.0)
+        disagreement = torch.linalg.norm(pose - fused0.unsqueeze(-2), dim=-1) * finite  # (B,T,J,V)
+        b, t, j, v, _ = pose.shape
+        feats = [fused0, pose.reshape(b, t, j, v * 3), disagreement, finite.float()]
+        if self.joint_emb is not None:
+            feats.append(self.joint_emb(torch.arange(j, device=pose.device))[None, None].expand(b, t, j, -1))
+        delta = self.residual(torch.cat(feats, dim=-1))
+        return fused + delta, weights
+
+
 class _ZeroHead(torch.nn.Module):
     """Replaces weight_mlp: constant logits -> uniform softmax over finite views."""
 
@@ -111,7 +143,9 @@ class _ZeroHead(torch.nn.Module):
 
 
 def build_model(args) -> LearnedFusion:
-    model = LearnedFusion(hidden=args.hidden, temporal=args.temporal, joint_emb=args.joint_emb)
+    kw = dict(hidden=args.hidden, temporal=args.temporal, joint_emb=args.joint_emb)
+    rh = getattr(args, "residual_hidden", 0)
+    model = ResidualFusion(residual_hidden=rh, **kw) if rh > 0 else LearnedFusion(**kw)
     if getattr(args, "uniform_weights", False):
         model.weight_mlp = _ZeroHead()
         model.joint_emb = None
@@ -387,6 +421,7 @@ def main() -> None:
     ap.add_argument("--no-temporal", dest="temporal", action="store_false")
     ap.set_defaults(temporal=True)
     ap.add_argument("--uniform-weights", action="store_true", help="ablation: fixed uniform view weights (temporal head only)")
+    ap.add_argument("--residual-hidden", type=int, default=0, help=">0: add a per-joint residual refinement MLP of this width")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     t = sub.add_parser("train")
