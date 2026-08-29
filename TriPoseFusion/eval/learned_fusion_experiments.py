@@ -263,6 +263,50 @@ def uncertainty_calibration(model, store: SeqStore) -> dict:
             "err_least_confident_decile": float(e[order[-k:]].mean()), "err_all": float(e.mean())}
 
 
+class TriPoseWrapper(torch.nn.Module):
+    """The ORIGINAL TriPoseFusion architecture (view encoder -> cross-view attention ->
+    joint-wise gate -> dilated TCN), re-trained here with triangulation supervision instead
+    of the degenerate median teacher, without InfoNCE, on already-canonical cache inputs.
+    Lets the paper keep the submitted architecture while fixing its training."""
+
+    def __init__(self, hidden: int = 64, refiner_dim: int = 128, refiner_layers: int = 4,
+                 velocity: bool = False, cross_view_attention: bool = True, temporal: bool = True) -> None:
+        super().__init__()
+        from omegaconf import OmegaConf
+        from models.keypoint_mlp import TriViewKeypointFusionNet
+        cfg = OmegaConf.load(REPO_ROOT / "configs" / "train.yaml")
+        cfg.train.view_name = list(VIEWS)
+        m = cfg.model
+        m.geofusion_view_names = list(VIEWS)
+        m.geofusion_use_2d = False
+        m.geofusion_use_conf = False
+        m.geofusion_use_reproj_error_feature = False
+        m.geofusion_canonicalize = False  # cache inputs are already canonical
+        m.geofusion_hidden_dim = int(hidden)
+        m.geofusion_refiner_dim = int(refiner_dim)
+        m.geofusion_refiner_layers = int(refiner_layers)
+        m.geofusion_use_multiscale_velocity = bool(velocity)
+        m.geofusion_use_cross_view_attention = bool(cross_view_attention)
+        m.geofusion_use_temporal_refiner = bool(temporal)
+        m.geofusion_use_dilated_refiner = True
+        m.geofusion_use_learned_gate = True
+        m.geofusion_dropout = 0.0
+        self.net = TriViewKeypointFusionNet(cfg)
+        self.last_logscale = None
+
+    def forward(self, view_pose: torch.Tensor, view_conf: torch.Tensor):
+        finite = torch.isfinite(view_pose).all(dim=-1)  # (B,T,J,V)
+        pose = torch.nan_to_num(view_pose, nan=0.0)
+        view_mask = finite.any(dim=(1, 2))  # (B,V): a view that is entirely missing is masked
+        if bool(view_mask.all()):
+            view_mask = None
+        out = self.net(pose3d={v: pose[:, :, :, i] for i, v in enumerate(VIEWS)}, view_mask=view_mask)
+        pred = out["P_final"]
+        any_finite = finite.any(dim=-1, keepdim=True)
+        pred = torch.where(any_finite.expand_as(pred), pred, torch.nan)
+        return pred, out["alpha"]
+
+
 class _ZeroHead(torch.nn.Module):
     """Replaces weight_mlp: constant logits -> uniform softmax over finite views."""
 
@@ -271,6 +315,9 @@ class _ZeroHead(torch.nn.Module):
 
 
 def build_model(args) -> LearnedFusion:
+    if getattr(args, "model", "learned") == "tripose":
+        return TriPoseWrapper(hidden=args.hidden, refiner_dim=args.refiner_dim, velocity=args.tripose_velocity,
+                              cross_view_attention=not args.no_cross_view_attention, temporal=args.temporal)
     if getattr(args, "model", "learned") == "setfusion":
         return SetFusion(d=args.hidden if args.hidden >= 16 else 64, temporal=args.temporal,
                          view_layers=args.view_layers, joint_layers=args.joint_layers,
@@ -579,7 +626,10 @@ def main() -> None:
     ap.set_defaults(temporal=True)
     ap.add_argument("--uniform-weights", action="store_true", help="ablation: fixed uniform view weights (temporal head only)")
     ap.add_argument("--residual-hidden", type=int, default=0, help=">0: add a per-joint residual refinement MLP of this width")
-    ap.add_argument("--model", choices=("learned", "setfusion"), default="learned")
+    ap.add_argument("--model", choices=("learned", "setfusion", "tripose"), default="learned")
+    ap.add_argument("--refiner-dim", type=int, default=128, help="tripose: TCN channel width")
+    ap.add_argument("--tripose-velocity", action="store_true", help="tripose: keep multi-scale velocity features")
+    ap.add_argument("--no-cross-view-attention", action="store_true", help="tripose: disable cross-view attention")
     ap.add_argument("--view-layers", type=int, default=2)
     ap.add_argument("--joint-layers", type=int, default=1)
     ap.add_argument("--no-uncertainty", action="store_true")
