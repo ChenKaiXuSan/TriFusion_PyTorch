@@ -195,17 +195,23 @@ class ResidualFusion(LearnedFusion):
     finite flags, joint embedding]. Tests whether capacity can correct systematic monocular
     errors (depth, hands) beyond view weighting, under correct pseudo-GT supervision."""
 
-    def __init__(self, residual_hidden: int = 64, **kw) -> None:
+    def __init__(self, residual_hidden: int = 64, uncertainty: bool = False, **kw) -> None:
         super().__init__(**kw)
         emb = self.joint_emb.embedding_dim if self.joint_emb is not None else 0
         in_dim = 3 + 3 * 3 + 3 + 3 + emb  # fused + 3 views*3 + disagreement + finite + emb
+        # uncertainty=True: 第 4 个输出为逐关节 Laplace log-scale（与 SetFusion 同款 NLL 训练）
+        self.uncertainty = uncertainty
+        self.last_logscale = None
         self.residual = torch.nn.Sequential(
             torch.nn.Linear(in_dim, residual_hidden), torch.nn.GELU(),
             torch.nn.Linear(residual_hidden, residual_hidden), torch.nn.GELU(),
-            torch.nn.Linear(residual_hidden, 3),
+            torch.nn.Linear(residual_hidden, 4 if uncertainty else 3),
         )
         torch.nn.init.zeros_(self.residual[-1].weight)
         torch.nn.init.zeros_(self.residual[-1].bias)
+        if uncertainty:
+            with torch.no_grad():
+                self.residual[-1].bias[3] = -3.0  # 初始 scale ≈ 0.05 m，接近典型误差量级
 
     def forward(self, view_pose: torch.Tensor, view_conf: torch.Tensor):
         fused, weights = super().forward(view_pose, view_conf)
@@ -217,8 +223,9 @@ class ResidualFusion(LearnedFusion):
         feats = [fused0, pose.reshape(b, t, j, v * 3), disagreement, finite.float()]
         if self.joint_emb is not None:
             feats.append(self.joint_emb(torch.arange(j, device=pose.device))[None, None].expand(b, t, j, -1))
-        delta = self.residual(torch.cat(feats, dim=-1))
-        return fused + delta, weights
+        out = self.residual(torch.cat(feats, dim=-1))
+        self.last_logscale = out[..., 3] if self.uncertainty else None
+        return fused + out[..., :3], weights
 
 
 class SetFusion(torch.nn.Module):
@@ -384,7 +391,8 @@ def build_model(args) -> LearnedFusion:
                          uncertainty=not args.no_uncertainty)
     kw = dict(hidden=args.hidden, temporal=args.temporal, joint_emb=args.joint_emb)
     rh = getattr(args, "residual_hidden", 0)
-    model = ResidualFusion(residual_hidden=rh, **kw) if rh > 0 else LearnedFusion(**kw)
+    model = (ResidualFusion(residual_hidden=rh, uncertainty=getattr(args, "residual_uncertainty", False), **kw)
+             if rh > 0 else LearnedFusion(**kw))
     if getattr(args, "uniform_weights", False):
         model.weight_mlp = _ZeroHead()
         model.joint_emb = None
@@ -686,6 +694,8 @@ def main() -> None:
     ap.set_defaults(temporal=True)
     ap.add_argument("--uniform-weights", action="store_true", help="ablation: fixed uniform view weights (temporal head only)")
     ap.add_argument("--residual-hidden", type=int, default=0, help=">0: add a per-joint residual refinement MLP of this width")
+    ap.add_argument("--residual-uncertainty", action="store_true",
+                    help="residual head also predicts per-joint Laplace log-scale (trained with masked NLL)")
     ap.add_argument("--model", choices=("learned", "setfusion", "tripose"), default="learned")
     ap.add_argument("--refiner-dim", type=int, default=128, help="tripose: TCN channel width")
     ap.add_argument("--tripose-velocity", action="store_true", help="tripose: keep multi-scale velocity features")
