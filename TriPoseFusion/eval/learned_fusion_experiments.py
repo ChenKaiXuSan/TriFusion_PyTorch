@@ -65,9 +65,11 @@ class _Seq(dict):
 class SeqStore(_BaseSeqStore):
     """fp16-resident drop-in for the baseline SeqStore (same sampling RNG order)."""
 
-    def __init__(self, cache_dir: Path, pairs: list) -> None:
+    def __init__(self, cache_dir: Path, pairs: list, gt_key: str = "gt_pose") -> None:
+        # gt_key: 缓存中作为参考的键（如 "gt_pose_tri52"），对应掩码键把 gt_pose 换成 gt_valid
         self.seqs = []
         missing = []
+        valid_key = gt_key.replace("gt_pose", "gt_valid", 1)
         for person, env in pairs:
             p = Path(cache_dir) / f"{person}_{env}.npz"
             if not p.exists():
@@ -78,8 +80,8 @@ class SeqStore(_BaseSeqStore):
                     person=person, env=env,
                     view_pose16=z["view_pose"].astype(np.float16),
                     view_conf16=z["view_conf"].astype(np.float16),
-                    gt_pose16=z["gt_pose"].astype(np.float16),
-                    gt_valid=z["gt_valid"].astype(bool),
+                    gt_pose16=z[gt_key].astype(np.float16),
+                    gt_valid=z[valid_key].astype(bool),
                 ))
         if missing:
             print(f"WARNING: {len(missing)} cache files missing: {missing[:4]} ...")
@@ -440,8 +442,8 @@ def cmd_train(args) -> None:
         torch.manual_seed(args.seed)
         rng = np.random.default_rng(args.seed + fold)
         train_pairs, val_pairs = load_fold_pairs(args.index_mapping, fold)
-        train_store = SeqStore(args.cache_dir, train_pairs)
-        val_store = SeqStore(args.cache_dir, val_pairs)
+        train_store = SeqStore(args.cache_dir, train_pairs, gt_key=args.train_gt_key)
+        val_store = SeqStore(args.cache_dir, val_pairs)  # 验证始终用 gt_pose（官方/主参考）
         print(f"[fold {fold}] train {len(train_store.seqs)} / val {len(val_store.seqs)} sequences", flush=True)
 
         model = build_model(args)
@@ -708,6 +710,8 @@ def main() -> None:
     t = sub.add_parser("train")
     t.add_argument("--folds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     t.add_argument("--augment-prob", type=float, default=0.0, help="per-sample prob of corrupting one random view during training")
+    t.add_argument("--train-gt-key", type=str, default="gt_pose",
+                   help="训练参考的缓存键 (如 gt_pose_tri52 = 自三角化参考); 验证始终用 gt_pose")
     t.add_argument("--steps", type=int, default=3000)
     t.add_argument("--batch", type=int, default=32)
     t.add_argument("--window", type=int, default=64)
