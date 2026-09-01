@@ -18,8 +18,8 @@
 \def\confYear{2026}
 
 % Reviewer section header and per-point run-in header
-\newcommand{\rsec}[1]{\vspace{3pt}\noindent\textbf{#1}\par\vspace{0.5pt}}
-\newcommand{\rpoint}[1]{\vspace{1pt}\noindent\textbf{#1}\;}
+\newcommand{\rsec}[1]{\vspace{2pt}\noindent\textbf{#1}\par\vspace{0.5pt}}
+\newcommand{\rpoint}[1]{\vspace{0.5pt}\noindent\textbf{#1}\;}
 
 \begin{document}
 
@@ -41,18 +41,18 @@ Cause: defects (i)+(iii). On synthetic rotated/scaled data the old code returns 
 Your inference is exactly right; the missing rule: temporally nearest valid shoulder axis within the clip, else a default lateral axis, with a parallel-case guard. Pseudocode added to \S3.3; model- and eval-side implementations unified.
 
 \rpoint{W3 --- independent reference.}
-In-cabin mocap being infeasible, we validate zero-shot against \emph{Drive\&Act's official reference} (R-xS2o~A2), breaking same-camera circularity; conclusions are stable across three reference versions.
+In-cabin mocap being infeasible, we instead validate zero-shot against \emph{Drive\&Act's official reference} (R-xS2o~A2); conclusions are stable across three reference versions.
 
 \rpoint{W4 --- narrow the learned-component claims.}
-We do: corrected, the full model $\equiv$ mean fusion (0.1857/0.0593 vs.\ 0.1858/0.0595, fold-0 val), so the claims are narrowed to \emph{canonicalization + uniform fusion} as the working core; the learned components' value is corruption robustness, not clean accuracy (R-xS2o~A1). Efficiency: 0.87M params, 3.3\,MB, 6.2\,ms/frame CPU.
+We do: corrected, the full model $\equiv$ mean fusion (0.1857/0.0593 vs.\ 0.1858/0.0595, fold-0 val), so the claims are narrowed to \emph{canonicalization + uniform fusion} as the working core; the learned components' value is corruption robustness, not clean accuracy (R-xS2o~A1); the 0.412\,m magnitude: R-xS2o~A2. Efficiency: 0.87M params, 3.3\,MB, 6.2\,ms/frame CPU.
 
 \rpoint{Minor.}
-Revision adds the exact 52-joint mapping table, frame-rate-normalized derivatives, GroupKFold splits/durations, and per-view imbalance analysis.
+Revision adds the exact 52-joint mapping table, frame-rate-normalized derivatives, GroupKFold splits/durations, and per-view imbalance analysis; broader joint-limit/biomechanical evaluation: acknowledged as future work.
 
 \rsec{Reviewer 19jf}
 
 \rpoint{W1 --- reference reliability under occlusion.}
-Now quantified per joint: valid-rate head/shoulder--neck 1.00, hands 0.34; hands dominate the corrected error (0.316\,m vs.\ torso 0.067, shoulder--neck 0.033). The revision reports hands separately, adds a torso-only protocol, and states the pipeline precisely: manual checks apply to the 2D inputs; triangulation is automatic DLT with a 40\,px filter, now per-sequence self-calibrated. External validation: R-xS2o~A2.
+Now quantified per joint: valid-rate head/shoulder--neck 1.00, hands 0.34; hands dominate the corrected error (0.316\,m vs.\ torso 0.067, shoulder--neck 0.033). The revision reports hands separately, adds a torso-only protocol, and states the pipeline precisely: manual checks apply to the 2D inputs; triangulation is automatic DLT with a 40\,px filter, now per-sequence self-calibrated, with per-sequence uncertainty statistics. External validation: R-xS2o~A2.
 
 \rpoint{W2 --- canonicalization mechanism.}
 The gain is the removal of per-view depth/scale inconsistency, not the fixed rig: the same procedure transfers zero-shot to Drive\&Act's different camera geometry (23.1\,mm PA), and raw$\to$canonicalized single-view error drops on both datasets.
@@ -63,7 +63,7 @@ Agreed --- see R-LAYQ~W4 and R-xS2o~A1.
 \rsec{Reviewer xS2o}
 
 \rpoint{A1 --- ``rectify the neural collapse'' (W1--W2).}
-The collapse is real but not forced by the entropy regularizer --- defect~(ii) made its gradient exactly zero. Diagnosis: retraining with the fix, with $\lambda_{\mathrm{gate}}{=}0$, and with a leave-one-view-out teacher all still yield 0.3333 gates --- the collapse is architectural (under a median pseudo-teacher, uniform fusion is a trivial optimum); claims narrowed accordingly (R-LAYQ~W4). Rectification: corruption-augmented training restores functional gating --- a 1.9K-param head assigns weight 0.037 to a zeroed view, degrading only +1--5\% (mean fusion: +18\%; weight exactly 0 for missing views); an 8K residual head improves clean MPJPE $-$14\% (0.128 vs.\ 0.149, 5-fold).
+The collapse is real but not forced by the entropy regularizer --- defect~(ii) made its gradient exactly zero. Diagnosis: retraining with the fix, with $\lambda_{\mathrm{gate}}{=}0$, and with a leave-one-view-out teacher all still yield 0.3333 gates --- the collapse is architectural (under a median pseudo-teacher, uniform fusion is a trivial optimum); claims narrowed accordingly (R-LAYQ~W4); W2 likewise confirmed --- TCN/velocity add no clean-input accuracy. Rectification: corruption-augmented training restores functional gating --- a 1.9K-param head assigns weight 0.037 to a zeroed view, degrading only +1--5\% (mean fusion: +18\%; weight exactly 0 for missing views); an 8K residual head improves clean MPJPE $-$14\% (0.128 vs.\ 0.149, 5-fold).
 
 \rpoint{A2 --- Drive\&Act evaluation (request 2, ``mandatory'').}
 Done, zero-shot (official reference, different rig, no training on it): canonicalize+mean \textbf{23.1\,mm} PA-MPJPE, full model \textbf{23.7\,mm} (rigid-MPJPE 31.6/32.5\,mm) --- zero-shot, against the \emph{fully supervised} 22.6--30.4\,mm SOTA you cite; label-free per-rig adaptation of the 8K head reaches \textbf{18.6\,mm} ($-$23\%). The paper's 0.412\,m magnitude was the defect-(iv) scale artifact, not pose error (W3); PCK@0.05/0.02 added (M3).
@@ -72,6 +72,6 @@ Done, zero-shot (official reference, different rig, no training on it): canonica
 UPose3D, Learnable Triangulation, and Faster VoxelPose consume images or calibrated volumes and are inapplicable to our keypoint-only interface, which by design avoids image-level fusion. On the identical input we add the applicable learned family: confidence-weighted LT-style regression (1.9K), set-attention with uncertainty head (28K; Spearman 0.72), residual head (8K; best), our original architecture (870K; worst) --- 16 configurations, 5-fold.
 
 \rpoint{Minor.}
-SAM3D architecture/training-domain details added (M1); reference circularity: R-19jf~W1 and the external Drive\&Act validation above (M2).
+SAM3D architecture/domain details added (M1); reference circularity (M2): R-19jf~W1 and A2.
 
 \end{document}
