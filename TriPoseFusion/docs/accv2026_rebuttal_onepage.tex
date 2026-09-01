@@ -1,0 +1,39 @@
+% ACCV 2026 one-page rebuttal — compile: pdflatex accv2026_rebuttal_onepage.tex
+% If ACCV releases an official rebuttal template, paste the body into it; densities are similar.
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=1.9cm]{geometry}
+\usepackage{newtxtext,newtxmath}
+\usepackage[compact]{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.5pt}
+\pagestyle{empty}
+\newcommand{\head}[1]{\vspace{2pt}\textbf{#1}\;}
+\begin{document}
+
+\begin{center}\textbf{Rebuttal --- TriPoseFusion (Submission \#XXXX)}\end{center}
+\vspace{-2pt}
+
+\head{To all reviewers.}
+Prompted by R-LAYQ's observation that PA-MPJPE exceeds MPJPE in Tab.~3, we audited our full evaluation stack. The audit confirmed the reviewers' concerns and found four defects: (i)~a transposed rotation and norm-ratio scale in the Procrustes alignment; (ii)~a zero-gradient gate-entropy regularizer (clamp after log; loss constant at $\ln 3$); (iii)~a degenerate shoulder fallback collapsing whole frames --- exactly as R-LAYQ inferred; (iv)~uncalibrated constructed extrinsics in the triangulation reference, causing per-session metric-scale errors (median 2.4$\times$). All are fixed (regression tests included); the reference is rebuilt by per-sequence self-calibration with anthropometric anchoring (reprojection $9.60\!\to\!3.31$\,px; shoulder-width std $0.369\!\to\!0.015$\,m; front-view utilization $8\%\!\to\!45\%$). All numbers below use the corrected code; fixes, calibration, and tests will be released.
+
+\head{1. R-LAYQ W1 --- metric anomaly.}
+Cause: (i)+(iii). On synthetic rotated/scaled data the old code returns PA error 0.7--2.4\,m where the truth is 0.04; the fix recovers the noise level. Corrected, same masks (a same-mask unaligned MPJPE is now also reported): canonicalized mean fusion 0.971/0.564\,m on the original reference --- the reversal is gone; 0.186/0.060\,m on the calibrated reference.
+
+\head{2. R-19jf W1, R-LAYQ W3, R-xS2o M2 --- reference reliability.}
+Per-joint valid rates: head/shoulder--neck 1.00, hands 0.34; hands dominate the corrected error (0.316\,m vs.\ torso 0.067, shoulder--neck 0.033). The revision reports hands separately, adds a torso-only protocol, and states the pipeline precisely (manual checks apply to the 2D inputs; triangulation is automatic DLT with a 40\,px filter). In-cabin mocap being infeasible (as R-xS2o notes), independence comes from zero-shot evaluation against \emph{Drive\&Act's official reference} (\S4), breaking same-camera circularity; conclusions are stable across three reference versions.
+
+\head{3. R-xS2o W1--W2, R-LAYQ W4, R-19jf m --- gating collapse; claims narrowed.}
+The collapse is real, but not forced by the entropy regularizer --- defect~(ii) made its gradient exactly zero. \emph{New experiments:} retraining with the fix, with $\lambda_{\mathrm{gate}}{=}0$, and with a leave-one-view-out teacher all still yield 0.3333 gates: the collapse is architectural (under a median pseudo-teacher, uniform fusion is a trivial optimum). We narrow the claims accordingly: the working core is \emph{canonicalization + uniform fusion} (corrected full model 0.1857/0.0593 $\equiv$ mean fusion 0.1858/0.0595); temporal/velocity modules give no clean-input gain, as both reviewers noted. \emph{New experiment:} corruption-augmented training restores functional gating --- a 1.9K-param head assigns weight 0.037 to a zeroed view, degrading only +1--5\% (mean fusion: +18\%; weight exactly 0 for missing views); an 8K residual head improves clean MPJPE $-$14\% (0.128 vs.\ 0.149, 5-fold cross-subject). Efficiency (R-LAYQ): 0.87M params, 3.3\,MB, 6.2\,ms/frame CPU.
+
+\head{4. R-xS2o requests 2--3 --- Drive\&Act; learned baselines. \emph{(New experiments.)}}
+Zero-shot on Drive\&Act (official reference, different rig, no training on it): canonicalize+mean \textbf{23.1\,mm} PA-MPJPE, full model \textbf{23.7\,mm} --- within the 22.6--30.4\,mm supervised-SOTA range the reviewer cites; DLT with the official calibration: 32.5\,mm absolute; label-free per-rig adaptation of the 8K head: \textbf{18.6\,mm} ($-$23\%). The paper's 0.412\,m magnitude was the defect-(iv) scale artifact, not pose error; PCK@0.05/0.02 added. Baselines: the named methods (UPose3D, Learnable Triangulation, Faster VoxelPose) consume images/calibrated volumes and are inapplicable to our keypoint-only interface, whose purpose is precisely to avoid image-level fusion on embedded hardware. On the identical input we add the applicable learned family: confidence-weighted LT-style regression (1.9K), set-attention with uncertainty head (28K; Spearman 0.72), residual head (8K; best), original architecture (870K; worst) --- 16 configurations, 5-fold.
+
+\head{5. R-19jf W2 --- canonicalization mechanism.}
+The gain is the removal of per-view depth/scale inconsistency, not the fixed rig: the same procedure transfers zero-shot to Drive\&Act's different geometry (23.1\,mm), and raw$\to$canonicalized single-view error drops on both datasets.
+
+\head{6. R-LAYQ W2 + minor items.}
+Missing fallback rule (correctly inferred): temporally nearest valid shoulder axis within the clip, else a default lateral axis, with a parallel-case guard; pseudocode added to \S3.3. Revision also adds: exact 52-joint mapping table, GroupKFold splits/durations, frame-rate-normalized derivatives, SAM3D architecture/domain details (R-xS2o M1).
+
+\end{document}
