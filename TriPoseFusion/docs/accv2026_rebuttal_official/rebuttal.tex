@@ -40,14 +40,15 @@ Method & MPJPE & PA-MPJPE & PCK@.05 & PCK@.10\\
 best single view (right) & 0.191 & 0.066 & 0.31 & 0.43\\
 mean fusion & 0.189 & 0.063 & 0.32 & 0.45\\
 submitted full model & 0.189 & 0.063 & 0.31 & 0.45\\
-\multicolumn{5}{@{}l}{\textit{B. Ours, calibrated ref., 5-fold cross-subject, diagnostic (m)}}\\
+\multicolumn{5}{@{}l}{\textit{B. Ours, calibrated ref., 5-fold cross-subject, learned baselines of A3 (m)}}\\
 mean fusion & 0.149 & 0.044 & 0.34 & 0.50\\
-8K residual head + corruption aug. & 0.128 & 0.040 & 0.37 & 0.55\\
+LT-style head, 1.9K & 0.149 & 0.044 & 0.26 & 0.50\\
+residual head, 8K & 0.128 & 0.040 & 0.37 & 0.55\\
+submitted arch.\ retrained, 870K & 0.142 & 0.044 & -- & 0.52\\
 \multicolumn{5}{@{}l}{\textit{C. Drive\&Act, official 3D ref., test subjects, zero-shot, 10 joints (mm): rigid$^\dagger$ / PA}}\\
 mean fusion (best single view: 29.0 / 24.0) & 31.6 & 23.1 & -- & --\\
 submitted full model & 32.5 & 23.7 & -- & --\\
 DLT, official calibration (14 joints, absolute) & 32.5 & 29.0 & -- & --\\
-8K head, per-rig adapted (LOSO, 9 joints) & 20.3 & 18.6 & -- & --\\
 \bottomrule
 \end{tabular}
 \vspace{-5pt}
@@ -75,12 +76,12 @@ Joints not triangulable from $\ge$2 views within the 40\,px reprojection filter 
 The gain is removal of per-view depth/scale inconsistency, not the fixed rig: canonicalized fusion beats every single view on our data (Tab.~\ref{tab:r1}A) and, zero-shot, on Drive\&Act (23.1 vs.\ 24.0--31.9\,mm PA). (Minor) module necessity: see W4, A1.
 
 \rpoint{R-xS2o A1 --- gating collapse (W1--W2).}
-We agree the stated entropy term, if active, favors uniform weights. Our audit found its implemented gradient exactly zero, so it did not cause the collapse; retraining without it, with the fix, and with a leave-one-view-out teacher still gave 0.3333 gates --- the median pseudo-teacher supplies the dominant trivial optimum. We therefore remove the term, narrow the clean-input claim (W2 confirmed), and evaluate gating only under explicit view corruptions: corruption-augmented training makes a 1.9K gated head give a zeroed view weight 0.037, degrading +1--5\% (mean fusion +18\%; 0 for missing views). The 8K residual head (Tab.~\ref{tab:r1}B) is diagnostic, not a replacement.
+We agree the stated entropy term, if active, favors uniform weights. Our audit found its implemented gradient exactly zero, so it did not cause the collapse; retraining without it, with the fix, and with a leave-one-view-out teacher still gave 0.3333 gates --- the median pseudo-teacher supplies the dominant trivial optimum. We therefore remove the term, narrow the clean-input claim (W2 confirmed), and evaluate gating only under explicit view corruptions: corruption-augmented training makes a 1.9K gated head give a zeroed view weight 0.037, degrading +1--5\% (mean fusion +18\%; 0 for missing views).
 
 \rpoint{A2 --- Drive\&Act (request 2).}
-Protocol: official split-0 test subjects, official 3D reference, no Drive\&Act training; the 10 joints shared with BODY-25; PA-MPJPE main (reference lacks hips for canonical alignment) and rigid-MPJPE, identical for all rows (Tab.~\ref{tab:r1}C). Label-free per-rig adaptation (self-triangulated reference from SAM3D 2D + official calibration; disjoint subjects): 18.6\,mm PA vs.\ 24.3 for mean fusion. We do not compare with published Drive\&Act MPJPE (different joints/metrics). 0.412\,m was the defect-(iv) artifact (W3); PCK@0.05/0.02 in Tab.~\ref{tab:r1} (M3).
+Protocol: official split-0 test subjects, official 3D reference, no Drive\&Act training; the 10 joints shared with BODY-25; PA-MPJPE main (reference lacks hips for canonical alignment) and rigid-MPJPE, identical for all rows (Tab.~\ref{tab:r1}C). We do not compare with published Drive\&Act MPJPE (different joints/metrics). 0.412\,m was the defect-(iv) artifact (W3); PCK@0.05/0.02 in Tab.~\ref{tab:r1} (M3).
 
 \rpoint{A3 --- deep-learning baselines (request 3).}
-Learnable Triangulation (2D heatmaps + camera parameters) and Faster VoxelPose (feature volumes) are not input-matched to our 3D-keypoint-only interface (nor reproducible within the rebuttal). Input-matched references added: direct DLT (Tab.~\ref{tab:r1}C; on our data it is the reference itself) and learned heads on identical input --- confidence-weighted LT-style (1.9K), set-attention (28K), residual (8K), and the submitted architecture retrained under the same protocol (870K), which did not beat the simpler heads. Minor: SAM3D details added (M1); circularity (M2): calibration, A2.
+Learnable Triangulation (2D heatmaps + camera parameters) and Faster VoxelPose (feature volumes) are not input-matched to our 3D-keypoint-only interface (nor reproducible within the rebuttal). Input-matched references added: direct DLT (Tab.~\ref{tab:r1}C; on our data it is the reference itself) and learned heads on identical input --- confidence-weighted LT-style (1.9K), set-attention (28K), residual (8K), and the submitted architecture retrained under the same protocol (870K), which did not beat the simpler heads (Tab.~\ref{tab:r1}B). Minor: SAM3D details added (M1); circularity (M2): calibration, A2.
 
 \end{document}
