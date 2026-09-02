@@ -1,0 +1,139 @@
+review
+Official Reviewby Reviewer LAYQ15 Aug 2026, 08:09 (modified: 27 Aug 2026, 21:03)Program Chairs, Area Chairs, Reviewer LAYQ, AuthorsRevisions
+Summary:
+TriPoseFusion is a keypoint-level model for fusing synchronized front, left, and right monocular 3D driver-pose streams. It first maps each prediction into an outlier-aware body-centered frame, constructs multi-scale motion features, performs cross-view attention and joint-wise gating, and applies temporal residual refinement. The model is trained without manual 3D labels using a canonicalized median pseudo teacher together with view-consistency, bone, temporal, contrastive, and gate-entropy losses. Evaluation uses 88 subject-environment sequences across four illumination settings and a manually corrected multi-view triangulation reference. The full system reports 0.412 m MPJPE and 0.275 m PA-MPJPE, with ablations attributing most of the improvement to canonicalization.
+
+Strengths:
+The keypoint-to-keypoint formulation is lightweight and practically motivated.
+
+The method addresses relevant failure modes: inconsistent frames, view-specific occlusion, missing joints, and temporal jitter.
+
+The paper reports dataset composition and triangulation reprojection errors instead of presenting the reference as true mocap ground truth.
+
+Table 4 transparently shows that robust canonicalization, rather than attention or temporal modules, drives almost all reported improvement.
+
+Major Weaknesses:
+Table 3 contains an important unexplained metric anomaly: canonicalized baselines have much worse PA-MPJPE than MPJPE (e.g., 1.664 m versus 0.969 m). Under a standard same-mask protocol, such a systematic reversal is unexpected. The authors should clarify masks, units, aggregation, and alignment code and provide corrected results if needed.
+
+The robust fallback in Section 3.3 is unclear. Replacing both shoulder anchors with the neck makes the stated shoulder vector zero, so an additional previous-frame or identity-axis rule appears to be missing. View-specific notation and pseudocode would likely resolve this ambiguity.
+
+Evaluation measures agreement with a reference derived from the same camera views rather than independent absolute 3D accuracy. A small mocap subset or direct corrected-2D triangulation baseline would substantially strengthen the evidence.
+
+Final MPJPE remains 0.412 m and PCK@10 cm is 0.141. Table 4 also shows no measurable gain from the full attention/gating/temporal design over canonicalization, while the gates are essentially uniform. The learned-component claims should therefore be narrowed or supported by further analysis.
+
+Minor Weaknesses:
+The exact 52-joint mapping between SAM3D and triangulated annotations is missing.
+
+Motion derivatives and temporal loss lack frame-rate normalization, making them sensitive to sampling.
+
+Bone regularization covers only three lengths; broader joint-limit and biomechanical-plausibility evaluation would be useful.
+
+Model size, runtime, and end-to-end latency are not reported despite the lightweight claim.
+
+The GroupKFold split, clip counts, sequence duration, and large per-view valid-count imbalance in Table 2 should be documented more fully.
+
+Rating: 2: Weak Reject
+Justification For Rating And Suggestions For Rebuttal:
+The problem and lightweight formulation are worthwhile, and robust canonicalization appears useful. However, the alignment-metric anomaly and unclear fallback directly affect the main evidence, while the learned modules add no measurable gain. In rebuttal, the authors should first resolve why PA-MPJPE exceeds MPJPE for canonicalized baselines, give the exact fallback algorithm, and clarify the evaluation masks and split; corrected metrics or a precise explanation could materially change the assessment.
+
+Confidence: 4: High Confidence: The reviewer has strong expertise in the area. They are highly familiar with the relevant literature and can critically evaluate the paper.
+A multi-view driver pose fusion framework with questionable evaluation validity.
+Official Reviewby Reviewer 19jf13 Aug 2026, 11:57 (modified: 27 Aug 2026, 21:03)Program Chairs, Area Chairs, Reviewer 19jf, AuthorsRevisions
+Summary:
+This paper proposes a tri-view keypoint fusion framework for driver pose estimation under challenging in-cabin scenarios. The authors collect a multi-view driver pose dataset and demonstrate improvements over single-view baselines and other fusion strategies. However, the reliability of the pose reference under severe occlusion and the actual generalization of the proposed canonicalization strategy require further investigation.
+
+Strengths:
+The paper addresses an important application scenario. Robust driver pose estimation under occlusion, limited viewpoints, and fast motion is valuable for driver monitoring and behavior understanding.
+
+The idea of geometry-guided canonicalization is reasonable. Mapping multi-view predictions into a common body-centered coordinate frame is a meaningful direction for reducing inconsistencies among monocular pose estimators.
+
+The authors collect a challenging in-cabin multi-view dataset. The dataset provides a realistic environment with occlusion and complex motion patterns, which could be useful for future driver pose research.
+
+Major Weaknesses:
+The ground-truth definition and evaluation protocol are questionable under severe occlusion. The dataset contains strong hand occlusion and limited camera coverage, but the paper still evaluates complete 21-joint hand poses. It is unclear how accurate the hand joint annotations are when the corresponding body parts are not visible in any camera view. The manually corrected triangulation reference may still contain significant uncertainty and cannot be considered reliable ground truth.
+
+The effectiveness of canonicalization is demonstrated, but its underlying mechanism is not sufficiently validated. The ablation shows that robust canonicalization provides the majority of the improvement, reducing MPJPE from 0.846m to 0.412m. However, it remains unclear whether this gain comes from effectively resolving cross-view monocular depth inconsistency or from exploiting the specific fixed three-view camera configuration. More analysis is needed to understand the generalization of this component.
+
+Minor Weaknesses:
+The paper should provide more details about annotation generation, manual correction procedures, and uncertainty estimation.
+
+The contribution of the remaining modules (cross-view attention, temporal refinement, and gating strategy) is relatively limited compared with canonicalization, and their necessity should be further discussed.
+
+Rating: 2: Weak Reject
+Justification For Rating And Suggestions For Rebuttal:
+This paper addresses an important problem in driver pose estimation and proposes a reasonable geometry-guided multi-view fusion strategy. The proposed canonicalization idea is meaningful, and the ablation results indicate that it provides substantial improvement.
+
+However, the current evaluation protocol raises fundamental concerns. The dataset contains severe occlusion, especially for hands, while the reference pose relies on triangulation from manually checked 2D keypoints. The reliability of such references is unclear, making it difficult to determine whether the reported improvements truly reflect better pose estimation.
+
+In addition, although canonicalization is shown to be the dominant component, the paper does not sufficiently demonstrate whether the improvement generalizes beyond the specific three-view setup.
+
+Confidence: 4: High Confidence: The reviewer has strong expertise in the area. They are highly familiar with the relevant literature and can critically evaluate the paper.
+TriPoseFusion: Keypoint Fusion Compromised by Mathematical Collapse and Evaluation Vulnerabilities
+Official Reviewby Reviewer xS2o08 Aug 2026, 16:07 (modified: 27 Aug 2026, 21:03)Program Chairs, Area Chairs, Reviewer xS2o, AuthorsRevisions
+Summary:
+The submission introduces a late-fusion architecture targeted at multi-view 3D human pose estimation (HPE) within the highly constrained environment of vehicle cabins.
+
+Recognizing the persistent challenges of monocular pose estimation, such as severe self-occlusions, steering-wheel obstructions, and extreme illumination volatility, the authors propose a pipeline that circumvents raw image-level volumetric fusion in favor of combining pre-computed, noisy 3D keypoint streams.
+
+A defining characteristic of the methodology is its reliance on a completely self-supervised training paradigm. The objective function integrates multiple geometric and temporal regularizers, including pseudo-teacher alignment against a canonicalized multi-view median, multi-view consistency constraints, anatomical bone-length regularization, temporal smoothness penalties, bidirectional InfoNCE contrastive view alignment, and gate entropy regularization.
+
+The empirical evaluation is conducted on a proprietary dataset comprising 88 subject-environment sequences recorded in a driving simulator, covering day, night, high-brightness, and low-brightness conditions.
+
+Strengths:
+The submission demonstrates several notable strengths, particularly regarding its pragmatic formulation, computational efficiency, and sophisticated self-supervised training regimen.
+
+The architecture directly addresses a highly relevant and commercially critical domain. In-cabin monitoring systems are mandated by emerging automotive safety regulations, yet deploying state-of-the-art 3D HPE algorithms in vehicular edge-computing units is often prohibited by extreme computational bottlenecks.
+
+By intentionally designing a keypoint-to-keypoint fusion interface, the authors entirely bypass the 
+ memory and processing constraints associated with dense volumetric back-projection frameworks like VoxelPose.
+
+The formulation of the self-supervised objective function represents a mathematically rigorous approach to in-the-wild deployment. The logistical impossibility of capturing pristine motion-capture (MoCap) ground truth within the confined geometry of a real vehicle cabin necessitates training-free or self-supervised pipelines.
+
+Major Weaknesses:
+Despite the pragmatic architectural intent, the submission suffers from profound methodological, empirical, and comparative vulnerabilities.
+
+Functional Collapse of the Adaptive View Gating Mechanism
+A central pillar of TriPoseFusion is its ability to execute "joint-wise adaptive view gating". The proposed gate function 
+ utilizes a multi-layer perceptron (MLP) and a softmax activation across the view dimension to dynamically generate time-varying reliability scores (
+), theoretically suppressing corrupted geometric data. However, the empirical evidence demonstrates that this attention mechanism completely collapses during training. The authors explicitly state in their ablation discussion that the learned gate weights remain nearly uniform, yielding mean front, left, and right weights of 0.33334, 0.33334, and 0.33335, respectively. This means that the network acts as a rigid, static arithmetic mean function, completely failing to execute the dynamic view suppression.
+
+The authors attribute this collapse to the gate entropy regularization loss ($\mathcal{L}{gate} = \log V + \sum_v \alpha{t,j,v} \log \alpha_{t,j,v}
+\lambda_{gate} = 0.01$), the optimization forces the softmax distribution into a state of maximum entropy.
+
+The consequences are severe. If a specific camera view is heavily corrupted by sun glare or total physical occlusion, the network will forcibly inject precisely 33.33% of that corrupted, hallucinated geometry into the final 3D fused pose.
+
+Inert Temporal Refinement and Feature Encoding
+The submission introduces a multi-scale motion-aware feature construction module, extracting first, second, and third-order temporal derivatives (velocities, accelerations, and jerk), followed by a four-layer Dilated Temporal Convolutional Network (TCN) to execute residual corrections and smooth high-frequency jitter. However, a critical examination of the ablation data in Table 4 reveals that these modules contribute almost nothing to the predictive accuracy of the system.
+
+The baseline model achieves an MPJPE of 0.846 meters. When the Dilated TCN is added, the error merely shifts to 0.845 meters, an improvement of only 1 millimeter. Similarly, the inclusion of multi-scale velocity features reduces the error by an identical 1 millimeter.
+
+Absolute Error Magnitudes
+The most important aspect of the experimental evaluation lies in the absolute magnitude of the reported errors. While the authors emphasize the relative percentage reduction in error, the raw physical measurements indicate that the system is producing functionally unusable spatial data.
+
+The standard SOTA benchmark for 3D HPE in an automotive cabin, as evaluated on the multi-modal Drive&Act dataset, yields an MPJPE between 22.6 mm and 30.4 mm. Even expansive motion-capture datasets like Human3.6M record SOTA errors hovering around 41.0 mm.
+
+In stark contrast, TriPoseFusion reports an initial oracle single-view error of 2.078 meters and a final, post-fusion error of 0.412 meters (412 millimeters).
+
+Complete Absence of State-of-the-Art Baselines
+To establish a valid contribution to the scientific community, a novel framework must be rigorously benchmarked against established, contemporary deep learning architectures. The baselines presented in Table 3 are limited exclusively to non-learned, rule-based operations (canonicalized front-only, arithmetic mean fusion, coordinate-wise median fusion). The authors have completely omitted comparisons against the SOTA deep learning methodologies that govern modern multi-view 3D HPE.
+
+The manuscript fails to compare TriPoseFusion against any of the following mandatory paradigms:
+
+Volumetric and Orthographic Architectures
+Differentiable Triangulation** Iskakov et al.
+Uncertainty-Aware Probabilistic Frameworks
+Minor Weaknesses:
+Ambiguity of the Monocular Estimator: The paper briefly cites the usage of an "off-the-shelf monocular pose estimator" referred to as SAM3D, but provides absolutely no architectural details, training domain context, or inherent bias analysis. If SAM3D has never been exposed to the severe truncations inherent to the in-cabin domain, it explains the catastrophic 2.078-meter single-view error. The fusion model's efficacy is entirely dependent on the specific error distribution of SAM3D, making the methodology highly non-generalizable.
+Invalidity of Pseudo-Ground Truth: The evaluation reference is generated via manual 2D correction and basic algebraic triangulation, openly acknowledged as a "pseudo-ground truth". However, Table 2 reveals that the 95th percentile multi-view reprojection error for this reference is 26.02 pixels, with the front view reaching 42.03 pixels. Validating a highly noisy fusion algorithm against a reference geometry containing up to 40 pixels of reprojection error generates circular, physically unmoored metrics.
+Loose Evaluation Thresholds: The authors report PCK@0.10 (Percentage of Correct Keypoints under 0.10 meters or 100 mm). Given that the average MPJPE is over 400 mm, a 100 mm threshold is far too relaxed to provide meaningful diagnostic insights into the spatial distribution of the errors within the tight constraints of a driver's seat.
+Rating: 2: Weak Reject
+Justification For Rating And Suggestions For Rebuttal:
+Moving multi-view fusion away from dense 
+ volumetric processing toward lightweight, keypoint-level compilation is a necessary trajectory for the deployment of advanced driver monitoring systems on resource-constrained automotive hardware. However, the proposed core architecture is proven to be affected by the mathematical paralysis, and its validation is limited to a proprietary dataset. Thus the current rating assigned to the manuscript.
+
+I think the author should address the following:
+
+Rectify the Neural Collapse: The collapse of the adaptive view gating into a uniform 0.333 arithmetic mean is unacceptable for a SOTA attention mechanism.
+Mandatory Evaluation on Drive&Act: The reliance on a private simulator dataset must be addressed.
+Integrate Deep Learning Baselines: Table 3 must be expanded. The authors must process their input streams through at least one contemporary deep-learning fusion baseline (e.g., UPose3D, Learnable Triangulation, or Faster VoxelPose).
+Confidence: 4: High Confidence: The reviewer has strong expertise in the area. They are highly familiar with the relevant literature and can critically evaluate the paper.
