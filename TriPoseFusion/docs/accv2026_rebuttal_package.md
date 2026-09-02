@@ -4,6 +4,16 @@
 > ② 伪 GT 表述属实（`sam3d_body_results_right/` 的 2D 关键点经人工矫正，三角化本身自动）。
 > 提交前审查修正 2 处无数据支撑表述（三版参考→两版；D&A 单视角对比改为 canonical 系）。
 > 最终文件：`accv2026_rebuttal_official/rebuttal.pdf`（#802，1 页），副本在 `TriFusion_accv/rebuttal/`。
+>
+> **v2 修订（2026-09-02，依据外部审读意见）**：① 新增统一结果表 Tab. 1（A 自有数据 fold-0 片段级
+> 聚合 / B 5 折诊断 / C Drive&Act 零样本），每块一个协议、一个 valid mask，正文数字改为片段级
+> 口径（模型 0.189/0.063）；② LAYQ W3 改为"无独立 MoCap，不再主张绝对精度"，Drive&Act 只作
+> 跨机位迁移证据（其 GT 本身是 OpenPose 三角化）；③ 门控段承认熵项若生效确会推向均匀，再说明
+> 实现梯度为零、去掉后仍塌缩、因此移除该项；④ 补 Drive&Act 协议（split-0 test、10 关节、PA 主
+> 指标原因、自适应 LOSO 受试者不相交）、手部 mask 全方法统一、尺度锚点来源（SAM3D 肩宽，PA/
+> 重投影与尺度无关）、回退轴定义与前瞻说明、延迟仅融合阶段；⑤ 删除与 SOTA 区间的直接比较；
+> 基线措辞改为 "not input-matched"，8K 残差头标注为 diagnostic，原架构改述为"同协议重训未优于
+> 简单头"；⑥ 补 DLT 直接三角化行（Drive&Act 官方标定，32.5 mm 绝对 MPJPE）。
 
 材料来源：`reviews_ac1f.txt`（三份评审全文）、`main.tex`（论文）、
 `results_summary_2026-08-30.md`（三阶段数字总表）、`review_fix_plan.md` §二·五~二·十、
