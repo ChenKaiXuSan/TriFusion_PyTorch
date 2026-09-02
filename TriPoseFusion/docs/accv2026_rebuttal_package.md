@@ -19,6 +19,18 @@
 > 同输入学习型基线家族中的一行（Tab. 1B 三行：1.9K / 8K / 原架构重训 870K）；删除 Drive&Act
 > "机位内自适应 18.6 mm" 行与相关句（无评审要求、属新贡献、触碰模板红线、且把叙事带偏为"新模型"），
 > 删除 A1 中"8K 头是 diagnostic 而非替换"的声明（不再需要）。18.6 mm 结果留给新论文。
+>
+> **v2.2（同日，第二轮外部审读）**：① A3 补 UPose3D（标定多视角 2D 关键点＋不确定性，与无标定
+> 3D 关键点接口不匹配；set-attention＋不确定性头覆盖其思路）；② 19jf W2 重写：canonicalization 是
+> 定义公共坐标系的前提步骤，raw-vs-canonicalized MPJPE 无意义（论文 2.078 m 是坐标系错配），可
+> 量化效果 = 融合相对最佳单视角的增益（干净输入下很小：MPJPE −1% / PA −5% / PCK +2pt；D&A PA
+> 24.0→23.1）＋视角丢失冗余＋跨机位迁移，明写"modest contribution"；③ A2 解释 D&A 上 rigid-MPJPE
+> 融合不如最佳单视角的原因（SAM3D 逐视角尺度偏差 ≈18%，平均不消除）；④ 加回 hedge：零样本误差与
+> 有监督 22.6–30.4 mm 同量级但不直接可比；⑤ 表格卫生：870K 补 PCK@0.05=0.35，DLT 移出 C 块改为
+> 脚注（sanity anchor），删 1.9K 行（正文注明≈mean）。**无法照做的建议**：加 "raw mean fusion"
+> 行——raw 各视角输出在各自相机系，MPJPE 无定义，PA 对刚体变换不变，该行要么是稻草人要么无信息。
+> **作者须知**：修正后 canonicalization+uniform fusion 相对最佳固定单视角的干净增益仅 1–5%，
+> 逐序列 oracle 最佳单视角（0.174 seq-mean）甚至优于均值融合（0.186）；这是论文剩余贡献的真实上限。
 
 材料来源：`reviews_ac1f.txt`（三份评审全文）、`main.tex`（论文）、
 `results_summary_2026-08-30.md`（三阶段数字总表）、`review_fix_plan.md` §二·五~二·十、

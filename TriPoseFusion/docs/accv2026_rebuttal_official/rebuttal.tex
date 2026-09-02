@@ -27,11 +27,11 @@
 \appendix
 
 \noindent\textbf{To all reviewers.}\;
-Prompted by R-LAYQ's Tab.~3 anomaly, we audited the full evaluation stack and found four defects: (i)~transposed rotation and norm-ratio scale in the Procrustes alignment; (ii)~a zero-gradient gate-entropy term (clamp after log); (iii)~a degenerate shoulder fallback collapsing whole frames; (iv)~uncalibrated, constructed extrinsics in the triangulation reference (per-session scale error, median 2.4$\times$). All are fixed and regression-tested. The reference is rebuilt by per-sequence bundle adjustment (reprojection $9.60\!\to\!3.31$\,px); each sequence's free global scale is anchored to the SAM3D-predicted shoulder width (median 0.371\,m; cross-sequence std $0.369\!\to\!0.015$\,m); PA-MPJPE and reprojection are scale-independent. Tab.~\ref{tab:r1} gives all corrected numbers, one protocol and one valid-joint mask per block.
+Auditing the full evaluation stack after R-LAYQ's Tab.~3 anomaly, we found four defects: (i)~transposed rotation and norm-ratio scale in the Procrustes alignment; (ii)~a zero-gradient gate-entropy term; (iii)~a degenerate shoulder fallback collapsing whole frames; (iv)~uncalibrated, constructed extrinsics in the triangulation reference (scale error, median 2.4$\times$). All are fixed. The reference is rebuilt by per-sequence bundle adjustment (reprojection $9.60\!\to\!3.31$\,px); each sequence's free scale is anchored to the SAM3D-predicted shoulder width (cross-sequence std $0.369\!\to\!0.015$\,m); PA-MPJPE and reprojection are scale-independent. Tab.~\ref{tab:r1} gives all corrected numbers (one protocol and valid-joint mask per block).
 
 \begin{table}[t]
 \centering\scriptsize
-\setlength{\tabcolsep}{2.5pt}
+\setlength{\tabcolsep}{2.5pt}\renewcommand{\arraystretch}{0.92}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
 Method & MPJPE & PA-MPJPE & PCK@.05 & PCK@.10\\
@@ -42,46 +42,44 @@ mean fusion & 0.189 & 0.063 & 0.32 & 0.45\\
 submitted full model & 0.189 & 0.063 & 0.31 & 0.45\\
 \multicolumn{5}{@{}l}{\textit{B. Ours, calibrated ref., 5-fold cross-subject, learned baselines of A3 (m)}}\\
 mean fusion & 0.149 & 0.044 & 0.34 & 0.50\\
-LT-style head, 1.9K & 0.149 & 0.044 & 0.26 & 0.50\\
 residual head, 8K & 0.128 & 0.040 & 0.37 & 0.55\\
-submitted arch.\ retrained, 870K & 0.142 & 0.044 & -- & 0.52\\
+submitted arch.\ retrained, 870K & 0.142 & 0.044 & 0.35 & 0.52\\
 \multicolumn{5}{@{}l}{\textit{C. Drive\&Act, official 3D ref., test subjects, zero-shot, 10 joints (mm): rigid$^\dagger$ / PA}}\\
 mean fusion (best single view: 29.0 / 24.0) & 31.6 & 23.1 & -- & --\\
 submitted full model & 32.5 & 23.7 & -- & --\\
-DLT, official calibration (14 joints, absolute) & 32.5 & 29.0 & -- & --\\
 \bottomrule
 \end{tabular}
 \vspace{-5pt}
-\caption{Corrected results. $^\dagger$rotation+translation alignment only.}
+\caption{Corrected results ($^\dagger$rigid = rotation+translation). Outside block~C's protocol: DLT, official calibration, 14 joints, absolute: 32.5 / 29.0\,mm.}
 \label{tab:r1}
-\vspace{-11pt}
+\vspace{-14pt}
 \end{table}
 
 \rpoint{R-LAYQ W1 --- metric anomaly.}
-Cause: (i)+(iii). Synthetic check: the old code returns PA error 0.7--2.4\,m where the truth is 0.04; the fix recovers it. Corrected, same masks: canonicalized mean fusion 0.971/0.564\,m on the original reference --- the reversal is gone; calibrated: Tab.~\ref{tab:r1}A (the submitted model is fold-0 by the paper's protocol).
+Cause: (i)+(iii); a synthetic regression test recovers the 0.04\,m truth (old code: 0.7--2.4\,m). Corrected, same masks: canonicalized mean fusion 0.971/0.564\,m on the original reference (reversal gone); calibrated: Tab.~\ref{tab:r1}A.
 
 \rpoint{W2 --- fallback rule.}
-Correct inference. Missing rule: shoulder axis of the nearest earlier valid frame (a leading invalid prefix uses the first valid frame --- the only look-ahead); none valid $\to$ canonical $+x$ axis; a guard covers the axis-parallel case; pseudocode in \S3.3.
+Missing rule: shoulder axis of the nearest earlier valid frame (a leading invalid prefix uses the first valid frame --- the only look-ahead); none valid $\to$ canonical $+x$ axis; axis-parallel guard; pseudocode in \S3.3.
 
 \rpoint{W3 --- independent reference.}
-No independent MoCap subset was available; we no longer claim absolute 3D accuracy and instead bound the reference by validity/reprojection statistics (19jf~W1) and reference sensitivity (conclusions unchanged across original/calibrated). Drive\&Act (A2) serves only as cross-rig transfer evidence --- its 3D reference is itself OpenPose-triangulated.
+No independent MoCap subset was available; we drop the absolute-accuracy claim and bound the reference by validity/reprojection statistics (19jf~W1) and sensitivity (conclusions unchanged across original/calibrated). Drive\&Act (A2) is cross-rig transfer evidence only --- its 3D reference is itself OpenPose-triangulated.
 
 \rpoint{W4 --- narrow the learned-component claims.}
-We do: submitted model $\equiv$ mean fusion (Tab.~\ref{tab:r1}A; see also A3). Claims narrow to canonicalization + uniform fusion; the learned parts' remaining value is corruption robustness (A1). Efficiency (0.87M params, 6.2\,ms/frame CPU) is fusion-stage only; end-to-end latency incl.\ SAM3D is unmeasured. Minor: mapping table, frame-rate normalization, split/clip statistics, view-imbalance analysis added; joint-limit evaluation: future work.
+We do: submitted model $\equiv$ mean fusion (Tab.~\ref{tab:r1}A, A3); claims narrow to a calibration-free canonicalization + uniform-fusion protocol with a small clean-input gain (19jf~W2), the learned parts' value being corruption robustness (A1). Efficiency (0.87M params, 6.2\,ms/frame CPU) is fusion-stage only; end-to-end latency incl.\ SAM3D is unmeasured. Minor items (mapping, frame-rate, splits, imbalance) added; joint-limit evaluation: future work.
 
 \rpoint{R-19jf W1 --- reference reliability under occlusion.}
-Joints not triangulable from $\ge$2 views within the 40\,px reprojection filter are invalid and excluded for \emph{every} method via the same mask. Validity: head/shoulder--neck 1.00, hands 0.34; hands dominate the error (0.316\,m vs.\ torso 0.067), so hands are reported separately, plus a torso-only protocol. Pipeline: manual checks on 2D inputs $\to$ automatic DLT $\to$ 40\,px filter $\to$ per-sequence calibration, with per-sequence uncertainty statistics.
+Joints not triangulable ($\ge$2 views within the 40\,px filter) are invalid and masked out for \emph{every} method. Validity: head/shoulder--neck 1.00, hands 0.34; hands dominate the error (0.316\,m vs.\ torso 0.067) and are reported separately (plus a torso-only protocol). Pipeline: manual checks on 2D inputs $\to$ automatic DLT $\to$ 40\,px filter $\to$ per-sequence calibration (+ uncertainty statistics).
 
 \rpoint{W2 --- canonicalization mechanism.}
-The gain is removal of per-view depth/scale inconsistency, not the fixed rig: canonicalized fusion beats every single view on our data (Tab.~\ref{tab:r1}A) and, zero-shot, on Drive\&Act (23.1 vs.\ 24.0--31.9\,mm PA). (Minor) module necessity: see W4, A1.
+Canonicalization defines the common frame enabling calibration-free fusion of per-view outputs that live in different camera frames; a raw-vs-canonicalized MPJPE is thus not meaningful (the paper's 2.078\,m raw figure measured frame mismatch, not pose error). Its measurable effect is the fusion gain over the best view: small on clean input (Tab.~\ref{tab:r1}A: MPJPE $-$1\%, PA $-$5\%, PCK@.10 +2\,pts; Drive\&Act PA 24.0$\to$23.1), redundancy under view loss (dropped view: MPJPE unchanged), and calibration-free cross-rig transfer --- a modest contribution, stated so in the revision.
 
 \rpoint{R-xS2o A1 --- gating collapse (W1--W2).}
-We agree the stated entropy term, if active, favors uniform weights. Our audit found its implemented gradient exactly zero, so it did not cause the collapse; retraining without it, with the fix, and with a leave-one-view-out teacher still gave 0.3333 gates --- the median pseudo-teacher supplies the dominant trivial optimum. We therefore remove the term, narrow the clean-input claim (W2 confirmed), and evaluate gating only under explicit view corruptions: corruption-augmented training makes a 1.9K gated head give a zeroed view weight 0.037, degrading +1--5\% (mean fusion +18\%; 0 for missing views).
+We agree the stated entropy term, if active, favors uniform weights. Its implemented gradient was exactly zero (so it did not cause the collapse); retraining without it, with the fix, and with a leave-one-view-out teacher still gave 0.3333 gates --- the median pseudo-teacher's trivial optimum. We remove the term, narrow the clean-input claim (W2 confirmed) and test gating only under explicit view corruptions: with corruption-augmented training a 1.9K gated head weights a zeroed view 0.037 and degrades +1--5\% (mean fusion +18\%; 0 for missing views).
 
 \rpoint{A2 --- Drive\&Act (request 2).}
-Protocol: official split-0 test subjects, official 3D reference, no Drive\&Act training; the 10 joints shared with BODY-25; PA-MPJPE main (reference lacks hips for canonical alignment) and rigid-MPJPE, identical for all rows (Tab.~\ref{tab:r1}C). We do not compare with published Drive\&Act MPJPE (different joints/metrics). 0.412\,m was the defect-(iv) artifact (W3); PCK@0.05/0.02 in Tab.~\ref{tab:r1} (M3).
+Protocol: official split-0 test subjects, no Drive\&Act training; the 10 joints shared with BODY-25; PA-MPJPE main (no hips for canonical alignment) and rigid-MPJPE (Tab.~\ref{tab:r1}C). Fusion beats every single view in PA; rigid-MPJPE also carries SAM3D's per-view scale bias (default shape $\approx$18\% too large) that averaging does not remove. Published Drive\&Act MPJPE is not directly comparable (joints/metrics), though our zero-shot errors are of the same order as the supervised 22.6--30.4\,mm cited. 0.412\,m was the defect-(iv) artifact (W3); PCK@0.05/0.02 in Tab.~\ref{tab:r1} (M3); SAM3D details (M1).
 
 \rpoint{A3 --- deep-learning baselines (request 3).}
-Learnable Triangulation (2D heatmaps + camera parameters) and Faster VoxelPose (feature volumes) are not input-matched to our 3D-keypoint-only interface (nor reproducible within the rebuttal). Input-matched references added: direct DLT (Tab.~\ref{tab:r1}C; on our data it is the reference itself) and learned heads on identical input --- confidence-weighted LT-style (1.9K), set-attention (28K), residual (8K), and the submitted architecture retrained under the same protocol (870K), which did not beat the simpler heads (Tab.~\ref{tab:r1}B). Minor: SAM3D details added (M1); circularity (M2): calibration, A2.
+UPose3D (calibrated multi-view 2D keypoints + uncertainty), Learnable Triangulation (2D heatmaps + cameras) and Faster VoxelPose (feature volumes) are not input-matched to our uncalibrated 3D-keypoint interface. Input-matched references (Tab.~\ref{tab:r1}B, note): direct DLT (on our data the reference itself) and learned heads on our input --- LT-style confidence weighting (1.9K), UPose3D-style uncertainty-aware set-attention (28K), residual (8K), and the submitted architecture retrained under the same protocol (870K), not beating simpler heads.
 
 \end{document}
