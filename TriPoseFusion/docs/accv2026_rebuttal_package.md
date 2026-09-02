@@ -31,6 +31,12 @@
 > 行——raw 各视角输出在各自相机系，MPJPE 无定义，PA 对刚体变换不变，该行要么是稻草人要么无信息。
 > **作者须知**：修正后 canonicalization+uniform fusion 相对最佳固定单视角的干净增益仅 1–5%，
 > 逐序列 oracle 最佳单视角（0.174 seq-mean）甚至优于均值融合（0.186）；这是论文剩余贡献的真实上限。
+>
+> **v2.3（2026-09-02 晚，版本合并）**：以 `TriFusion_accv/rebuttal/` 17:44 版为准（A2 的 PCK 引用改正为
+> 0.05/0.10，与 Tab. 1 列一致），放弃 worktree 内 4 处未提交的措辞微调；补两个指针：19jf W2 末
+> "Module necessity: W4, A1."、xS2o A2 末 "M2: W3, 19jf W1."；为回 1 页压缩 A3/A2 两处从句。
+> 至此三份审稿 20 条意见每条都有显式编号回应或指针。最终稿 = `accv2026_rebuttal_official/rebuttal.tex`
+> ≡ `TriFusion_accv/rebuttal/rebuttal.tex`（需在 TriFusion_accv 里 commit+push 到 Overleaf）。
 
 材料来源：`reviews_ac1f.txt`（三份评审全文）、`main.tex`（论文）、
 `results_summary_2026-08-30.md`（三阶段数字总表）、`review_fix_plan.md` §二·五~二·十、
@@ -299,8 +305,8 @@ PCK@0.05/0.02 added.
 
 ## 阶段三 B：One-page ACCV rebuttal（英文，可直接排版）
 
-见同目录 `accv2026_rebuttal_onepage.tex`（已实测编译为 1 页）。文本与 tex 一致，
-以 tex 为准。
+最终稿见 `accv2026_rebuttal_official/rebuttal.tex`（官方 ACCV 模板，v2.3，实测编译 1 页；
+需 `pdflatex` 三遍行号才正确）。早期单栏自制版 `accv2026_rebuttal_onepage.tex` 已作废。
 
 ---
 
