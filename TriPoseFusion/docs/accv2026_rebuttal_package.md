@@ -1,5 +1,10 @@
 # ACCV 2026 Rebuttal 工作包（2026-09-01）
 
+> **定稿记录（2026-09-02）**：作者已确认 ① 披露策略（四缺陷公开披露 + 主张收窄）；
+> ② 伪 GT 表述属实（`sam3d_body_results_right/` 的 2D 关键点经人工矫正，三角化本身自动）。
+> 提交前审查修正 2 处无数据支撑表述（三版参考→两版；D&A 单视角对比改为 canonical 系）。
+> 最终文件：`accv2026_rebuttal_official/rebuttal.pdf`（#802，1 页），副本在 `TriFusion_accv/rebuttal/`。
+
 材料来源：`reviews_ac1f.txt`（三份评审全文）、`main.tex`（论文）、
 `results_summary_2026-08-30.md`（三阶段数字总表）、`review_fix_plan.md` §二·五~二·十、
 `v3_decision_log_2026-08-30.md`。数字若与本文件冲突，以 `results_summary_2026-08-30.md` 为准。
