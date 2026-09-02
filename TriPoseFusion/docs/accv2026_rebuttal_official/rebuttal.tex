@@ -41,7 +41,7 @@ Cause: defects (i)+(iii). On synthetic rotated/scaled data the old code returns 
 Your inference is exactly right; the missing rule: temporally nearest valid shoulder axis within the clip, else a default lateral axis, with a parallel-case guard. Pseudocode added to \S3.3; model- and eval-side implementations unified.
 
 \rpoint{W3 --- independent reference.}
-In-cabin mocap being infeasible, we instead validate zero-shot against \emph{Drive\&Act's official reference} (R-xS2o~A2); conclusions are stable across three reference versions.
+In-cabin mocap being infeasible, we instead validate zero-shot against \emph{Drive\&Act's official reference} (R-xS2o~A2); all conclusions hold on both the original and the calibrated reference.
 
 \rpoint{W4 --- narrow the learned-component claims.}
 We do: corrected, the full model $\equiv$ mean fusion (0.1857/0.0593 vs.\ 0.1858/0.0595, fold-0 val), so the claims are narrowed to \emph{canonicalization + uniform fusion} as the working core; the learned components' value is corruption robustness, not clean accuracy (R-xS2o~A1); the 0.412\,m magnitude: R-xS2o~A2. Efficiency: 0.87M params, 3.3\,MB, 6.2\,ms/frame CPU.
@@ -55,7 +55,7 @@ Revision adds the exact 52-joint mapping table, frame-rate-normalized derivative
 Now quantified per joint: valid-rate head/shoulder--neck 1.00, hands 0.34; hands dominate the corrected error (0.316\,m vs.\ torso 0.067, shoulder--neck 0.033). The revision reports hands separately, adds a torso-only protocol, and states the pipeline precisely: manual checks apply to the 2D inputs; triangulation is automatic DLT with a 40\,px filter, now per-sequence self-calibrated, with per-sequence uncertainty statistics. External validation: R-xS2o~A2.
 
 \rpoint{W2 --- canonicalization mechanism.}
-The gain is the removal of per-view depth/scale inconsistency, not the fixed rig: the same procedure transfers zero-shot to Drive\&Act's different camera geometry (23.1\,mm PA), and raw$\to$canonicalized single-view error drops on both datasets.
+The gain is the removal of per-view depth/scale inconsistency, not the fixed rig: the same procedure transfers zero-shot to Drive\&Act's different camera geometry, where canonicalized fusion (23.1\,mm PA) again beats every single view (24.0--31.9\,mm).
 
 \rpoint{Minor --- module necessity.}
 Agreed --- see R-LAYQ~W4 and R-xS2o~A1.
