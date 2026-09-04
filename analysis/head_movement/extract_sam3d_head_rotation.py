@@ -9,7 +9,9 @@ ear midpoint and its rotation cleanly separates real head turns (~45 deg) from t
 keypoint artefacts (<5 deg).  Nothing cached this field, so we read the raw npz.
 
 Output: <out>/<person>_<env>/<view>.npz with head_rot (T,3,3) f32, root_rot (T,3) f32
-(axis-angle global orientation), frame_ids; resumable (existing view files are skipped).
+(axis-angle global orientation), joint_coords (T,127,3) f32 (SAM3D/MHR 127-joint skeleton in
+the same camera frame as pred_keypoints_3d: head joints 111-125, 114 = skull centre,
+121 = nose, 123/125 = eyes, 39/75 = shoulders, 112 = neck), frame_ids; resumable.
 Reading the pickled npz loads the whole record (image + mesh) - I/O bound; use workers.
 """
 from __future__ import annotations
@@ -36,6 +38,7 @@ def extract_one(task) -> str:
     T = len(frame_ids)
     head = np.full((T, 3, 3), np.nan, dtype=np.float32)
     root = np.full((T, 3), np.nan, dtype=np.float32)
+    joints = np.full((T, 127, 3), np.nan, dtype=np.float32)   # MHR 127-joint skeleton, camera frame
     ok = np.zeros(T, dtype=bool)
     vdir = sam3d_root / person / env / view
     for i, fid in enumerate(frame_ids):
@@ -46,11 +49,13 @@ def extract_one(task) -> str:
             o = np.load(p, allow_pickle=True)["output"].item()
             head[i] = o["pred_global_rots"][HEAD_JOINT]
             root[i] = o["global_rot"]
+            joints[i] = o["pred_joint_coords"]
             ok[i] = True
         except Exception as e:  # corrupt file: leave NaN
             print(f"!! {p.name}: {e}", file=sys.stderr, flush=True)
     tmp = out_path.with_suffix(".tmp.npz")
-    np.savez_compressed(tmp, head_rot=head, root_rot=root, ok=ok, frame_ids=np.asarray(frame_ids))
+    np.savez_compressed(tmp, head_rot=head, root_rot=root, joint_coords=joints, ok=ok,
+                        frame_ids=np.asarray(frame_ids))
     tmp.rename(out_path)
     return f"done {seq}/{view} ok={int(ok.sum())}/{T}"
 
