@@ -224,8 +224,14 @@ def analyse_sequence(name: str, args, splits: dict, det_grid: dict) -> dict:
     kappa_h = fleiss_kappa((H[:, drive] != 0)) if n_raters >= 2 else float("nan")
     kappa_v = fleiss_kappa((V[:, drive] != 0)) if n_raters >= 2 else float("nan")
 
-    # --- angles from fused_v3 (canonical frame: x = right, y = down, z = fore/aft)
-    P = f["fused_v3"].astype(np.float64)
+    # --- angles from the selected keypoint source (canonical frame: x = right, y = down, z = fore/aft)
+    #     fused_v3 / fused_mean / fused_median: fused keypoints; view_<cam>: that camera's own SAM3D
+    #     keypoints after its per-frame canonicalization (head-vs-torso angles are invariant to it).
+    if args.source.startswith("view_"):
+        cams = [str(c) for c in f["cameras"]]
+        P = f["view_pose"][:, :, cams.index(args.source[5:]), :].astype(np.float64)
+    else:
+        P = f[args.source].astype(np.float64)
     fwd_sign = np.sign(np.nanmedian((P[:, NOSE] - 0.5 * (P[:, LEAR] + P[:, REAR]))[:, 2])) or 1.0
     ex, ey, ez = np.eye(3)
     yaw_c, pitch_c = head_angles(P[:, NOSE], P[:, LEAR], P[:, REAR], ex, -ey, fwd_sign * ez)
@@ -319,7 +325,7 @@ def analyse_sequence(name: str, args, splits: dict, det_grid: dict) -> dict:
     if args.prefer_mhr and yaw_mhr is not None:
         angle_source, primary_yaw, primary_pitch = "fused_mhr_head_keypoints", yaw_mhr, pitch_mhr
     else:
-        angle_source, primary_yaw, primary_pitch = "fused_v3_keypoints", yaw_c, pitch_c
+        angle_source, primary_yaw, primary_pitch = f"{args.source}_keypoints", yaw_c, pitch_c
     nanT = np.full(T, np.nan)
 
     series = {}
@@ -479,6 +485,9 @@ def main() -> None:
     ap.add_argument("--head-rot-dir", type=Path, default=D / "sam3d_head_rot_cache",
                     help="per-sequence SAM3D head-joint rotations (extract_sam3d_head_rotation.py)")
     ap.add_argument("--sequences", nargs="*", default=None, help="subset of <person>_<env> names (debug)")
+    ap.add_argument("--source", default="fused_v3",
+                    choices=["fused_v3", "fused_mean", "fused_median", "view_front", "view_left", "view_right"],
+                    help="keypoint source for the head angles (all in the canonical body frame)")
     ap.add_argument("--prefer-mhr", action="store_true",
                     help="use fused MHR head joints as the primary angle source instead of the 52-joint fused_v3")
     ap.add_argument("--export-mhr", action="store_true",
