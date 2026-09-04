@@ -1,7 +1,7 @@
 source,label,n_sequences,mean_ai_horizontal_turns_per_min,mean_ai_horizontal_peak_deg_mean,mean_ai_vertical_turns_per_min,mean_ai_horizontal_turn_duration_s_mean,mean_yaw_p95_abs_deg,mean_annotated_glances_with_head_turn_ge15,mean_yaw_keypoint_vs_rotation_corr,spearman_vs_v3_ai_horizontal_turns_per_min,spearman_vs_v3_ai_horizontal_peak_deg_mean
-fused_v3,v3 融合,88,2.28,27.1,2.27,1.27,14.41,0.09,0.76,1.0,1.0
+fused_v3,v3 融合,88,2.28,27.1,2.27,1.27,14.41,0.09,0.86,1.0,1.0
 fused_mean,均值融合,88,2.12,25.99,1.44,1.18,13.24,0.08,0.86,0.946,0.789
-fused_median,中位数融合,88,2.2,26.35,1.83,1.15,13.37,0.08,0.84,0.949,0.88
-view_front,单视角 front,88,2.44,26.2,3.31,0.91,12.99,0.09,0.79,0.905,0.812
+fused_median,中位数融合,88,2.2,26.35,1.83,1.15,13.37,0.08,0.83,0.949,0.88
+view_front,单视角 front,88,2.44,26.2,3.31,0.91,12.99,0.09,0.76,0.905,0.812
 view_left,单视角 left,88,2.38,26.8,2.59,1.33,15.01,0.09,0.83,0.913,0.616
-view_right,单视角 right,88,2.29,26.36,2.16,1.17,13.87,0.09,0.81,0.901,0.683
+view_right,单视角 right,88,2.29,26.36,2.16,1.17,13.87,0.09,0.8,0.901,0.683
