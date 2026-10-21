@@ -103,6 +103,27 @@ SAM3D 52 关节 × 3 视角
 - 数据：`learned_fusion_cache_driveandact_selftri/`（6 npz + summary.json）。
 - 迁移清单：`data/drive/TRIFUSION_TRANSFER_MANIFEST.md`（两模型训练包 0.9 GB；v3 GT 11 GB）。
 
+## 7. T-ITS 下游分析节（2026-10-21，仅自有数据）
+
+决定：下游节只做"头部朝向测量有效性"（自有 88 段），不做 Drive&Act 活动识别（留作审稿备手）。
+full 模型关键点由 `export_fused_keypoints.py --model-root perseq_setfusion --suffix full` 导出（与训练日志逐段一致），
+头部分析脚本 `analysis/head_movement/run_head_movement_analysis.py --source fused_full`，七来源同流程同阈值。
+
+| 来源 | yaw 与旋转矩阵信号相关 均值 / 最低 | 失效段(r<0.5) | 转头 次/分 |
+|---|---|---|---|
+| front / left / right 单视角 | 0.76/0.16 · 0.83/0.52 · 0.80/0.21 | 4 · 0 · 3 | 2.44 / 2.38 / 2.29 |
+| median / mean 融合 | 0.83/0.44 · 0.86/0.50 | 1 · 1 | 2.20 / 2.12 |
+| 残差 64＋增强（8K，fused_v3） | 0.86/0.56 | 0 | 2.28 |
+| **SetFusion full（27.9K，fused_full）** | **0.86/0.61** | **0** | 2.53 |
+
+- 光照 Friedman（fused_full）：转头频率 p=0.54、峰值角 0.57、yaw p95 0.42 → 测量跨光照稳定。
+- **瞥视标注方向一致性（阴性，弃用）**：六来源左/右一致率 47–50%（随机），标注为 right/left 的帧 yaw 偏离基线
+  −0.2°/+0.1°；仅 9% 的瞥视事件峰值达 15°（`annotated_glances_with_head_turn_ge15`）。
+  README 中"中位 8°/三成达 15°"无对应输出，不采用。脚本 `glance_direction_agreement.py`。
+- 图 `paper_tits/figures/yaw_trace.pdf`：17_夜少ない 196–236 s，front 相关 0.23 vs fused_full 0.82（`plot_yaw_trace.py`）。
+- 入稿：§Downstream Utility（Uncertainty Calibration 之后），tab:downstream + fig:yaw，摘要/贡献各加一句；
+  caveat：仅验证头部信号（手部效用由 per-joint 间接支持）、核对信号与关键点同估计器（部分独立）。
+
 ## 6. 待办
 
 1. ~~实验 1–3 汇总~~（已完成，见 §4）；不确定性头**合体保留**（NLL 不损精度）。写入 `review_fix_plan.md`。

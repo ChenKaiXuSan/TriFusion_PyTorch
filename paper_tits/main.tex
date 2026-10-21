@@ -25,7 +25,7 @@
 \maketitle
 
 \begin{abstract}
-Driver monitoring systems need stable 3D body pose under occlusion, constrained camera placement, and rapidly changing illumination. Off-the-shelf monocular 3D pose estimators can be deployed per camera, but their outputs live in inconsistent coordinate frames and exhibit view-dependent errors, and obtaining metric 3D ground truth inside a vehicle cabin is impractical. This paper presents a complete, self-calibrated pipeline for fusing synchronized tri-view monocular 3D keypoints. First, we show that a multi-view triangulation reference built with nominal camera extrinsics suffers per-session scale errors of up to $6\times$, and we introduce a per-sequence self-calibration procedure---robust bundle adjustment of the camera extrinsics from the 2D keypoint observations themselves, with the metric scale gauge anchored to the monocular estimator's body-size prior---that reduces the reference reprojection error from 10.3 to 3.6\,px and its cross-session shoulder-width spread from $0.46$--$2.10$\,m to $0.368\pm0.015$\,m without any calibration target or manual 3D annotation. Second, we present \method{}, a lightweight fusion network (28K parameters, $<$0.6\,ms per frame on one CPU thread) that combines masked set attention over any subset of views, corruption-aware gating trained with view-corruption augmentation, a residual refinement head supervised by the self-calibrated triangulation reference, and a per-joint uncertainty output. On 88 subject-environment sequences under four illumination conditions and subject-disjoint 5-fold evaluation, \method{} reduces MPJPE by 11.8\% and hand error by 11\% over the strongest training-free fusion baseline, with consistent gains in all four illumination conditions; when one camera fails, its accuracy degrades by less than 7\% while assigning the corrupted view a weight of 0.01--0.03, matching an oracle that knows which view is corrupted. The predicted uncertainty correlates with the actual error (Spearman $\rho=0.74$). On the public \da{} benchmark, the training-free canonicalized fusion transfers zero-shot at 23.1\,mm PA-MPJPE, and re-running the adaptation recipe on the new rig---supervised only by triangulation of the rig's own observations, with no manual labels---improves it to 20.6\,mm (18.6\,mm when the dataset's own reference supervises, an upper bound in reference quality). We further contribute two cautionary analyses of broad relevance: a proof that consensus-teacher self-supervision collapses multi-view gating to uniform averaging, and a demonstration of how reference-scale errors manufacture illusory learning gains.
+Driver monitoring systems need stable 3D body pose under occlusion, constrained camera placement, and rapidly changing illumination. Off-the-shelf monocular 3D pose estimators can be deployed per camera, but their outputs live in inconsistent coordinate frames and exhibit view-dependent errors, and obtaining metric 3D ground truth inside a vehicle cabin is impractical. This paper presents a complete, self-calibrated pipeline for fusing synchronized tri-view monocular 3D keypoints. First, we show that a multi-view triangulation reference built with nominal camera extrinsics suffers per-session scale errors of up to $6\times$, and we introduce a per-sequence self-calibration procedure---robust bundle adjustment of the camera extrinsics from the 2D keypoint observations themselves, with the metric scale gauge anchored to the monocular estimator's body-size prior---that reduces the reference reprojection error from 10.3 to 3.6\,px and its cross-session shoulder-width spread from $0.46$--$2.10$\,m to $0.368\pm0.015$\,m without any calibration target or manual 3D annotation. Second, we present \method{}, a lightweight fusion network (28K parameters, $<$0.6\,ms per frame on one CPU thread) that combines masked set attention over any subset of views, corruption-aware gating trained with view-corruption augmentation, a residual refinement head supervised by the self-calibrated triangulation reference, and a per-joint uncertainty output. On 88 subject-environment sequences under four illumination conditions and subject-disjoint 5-fold evaluation, \method{} reduces MPJPE by 11.8\% and hand error by 11\% over the strongest training-free fusion baseline, with consistent gains in all four illumination conditions; when one camera fails, its accuracy degrades by less than 7\% while assigning the corrupted view a weight of 0.01--0.03, matching an oracle that knows which view is corrupted. The predicted uncertainty correlates with the actual error (Spearman $\rho=0.74$). As a downstream check, head yaw measured from the fused keypoints agrees with an independent head-rotation signal on every one of the 88 drives (worst case $r=0.61$), whereas a single camera fails on up to four drives. On the public \da{} benchmark, the training-free canonicalized fusion transfers zero-shot at 23.1\,mm PA-MPJPE, and re-running the adaptation recipe on the new rig---supervised only by triangulation of the rig's own observations, with no manual labels---improves it to 20.6\,mm (18.6\,mm when the dataset's own reference supervises, an upper bound in reference quality). We further contribute two cautionary analyses of broad relevance: a proof that consensus-teacher self-supervision collapses multi-view gating to uniform averaging, and a demonstration of how reference-scale errors manufacture illusory learning gains.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -51,7 +51,7 @@ Our contributions are:
 \begin{itemize}
 \item \textbf{A self-calibrated triangulation reference for in-cabin rigs.} Per-sequence robust bundle adjustment of camera extrinsics from the 2D keypoint observations themselves, with the scale gauge anchored to the monocular estimator's body-size prior. No calibration target, no manual 3D annotation. Reference reprojection error drops from 10.3 to 3.6\,px, front-view utilization rises from 8\% to 45\%, and the cross-session shoulder-width spread collapses from std 0.37\,m to 0.015\,m (Tables~\ref{tab:gtquality} and \ref{tab:gtbreak}).
 \item \textbf{\method{}, a lightweight, deployment-oriented fusion network.} Masked set attention over the available views (any subset of 1--3 cameras), corruption-aware gating trained with view-corruption augmentation, residual refinement supervised by the self-calibrated reference, and a per-joint Laplace uncertainty output. 27.9K parameters; $<$0.6\,ms per frame on a single CPU thread.
-\item \textbf{A controlled benchmark and an honest accounting of where learning helps.} Under subject-disjoint 5-fold evaluation, \method{} improves MPJPE by 11.8\%, hand error by 11\%, and PCK@0.10 by $+4.1$ points over the strongest training-free fusion, with gains in all four illumination conditions; view weighting alone contributes nothing; under a corrupted camera, accuracy is maintained within 7\% (vs.\ 19\% degradation for averaging), matching an oracle exclusion.
+\item \textbf{A controlled benchmark and an honest accounting of where learning helps.} Under subject-disjoint 5-fold evaluation, \method{} improves MPJPE by 11.8\%, hand error by 11\%, and PCK@0.10 by $+4.1$ points over the strongest training-free fusion, with gains in all four illumination conditions; view weighting alone contributes nothing; under a corrupted camera, accuracy is maintained within 7\% (vs.\ 19\% degradation for averaging), matching an oracle exclusion; and a downstream head-orientation check shows the fused keypoints yield a valid head-yaw signal on all 88 drives, where single cameras fail on 3--4.
 \item \textbf{Cross-rig validation on \da{}} \cite{martin2019drive}: training-free canonicalized fusion transfers zero-shot (23.1\,mm PA-MPJPE, in the range of fully supervised methods trained on that benchmark), and the fully label-free adaptation recipe---supervised only by DLT triangulation of the rig's own 2D keypoints---reduces it to 20.6\,mm (leave-one-subject-out), with wrist error reduced by 24\%; the dataset's own reference as supervision gives 18.6\,mm, showing the gain scales with reference quality.
 \item \textbf{Two cautionary analyses}: a proof that consensus-teacher self-supervision makes uniform view weighting the loss-optimal solution (explaining ``gate collapse'' observations), and a quantified case study of how reference-scale errors manufacture illusory learning gains that do not transfer.
 \end{itemize}
@@ -360,7 +360,7 @@ Oracle excl.\ view & -- & 0.152 & 0.152 (0) & 0.152 (0) \\
 \caption{\da{}, leave-one-subject-out adaptation (3 folds; shared upper-body joints; m). ``Rig ref.''\ rows are supervised \emph{only} by DLT triangulation of the rig's own 2D keypoints (fully label-free); ``dataset ref.''\ rows use the official reference for supervision (an upper bound in reference quality). All rows are evaluated against the official reference.}
 \label{tab:da}
 \scriptsize
-\setlength{\tabcolsep}{3.2pt}
+\setlength{\tabcolsep}{1.8pt}
 \begin{tabular}{lccc}
 \toprule
 Method & MPJPE $\downarrow$ & PA-MPJPE $\downarrow$ & Wrists $\downarrow$ \\
@@ -381,6 +381,40 @@ Residual-only (dataset ref.) & \best{$0.0203{\pm}.002$} & \best{$0.0186{\pm}.002
 \subsection{Uncertainty Calibration}
 The Laplace scale output orders errors well: the Spearman correlation between predicted scale and realized per-joint error is $0.74$ on the in-cabin folds (stable at $0.71$--$0.74$ across all architecture ablations) and $0.43$--$0.51$ on adapted \da{} (label-free / dataset-reference supervision). Thresholding by confidence is directly useful downstream: the most-confident decile of joints carries 1.6\,cm mean error versus 27\,cm for the least-confident decile (14.8\,cm overall); on adapted \da{}, 1.1\,cm versus 3.4\,cm. A monitoring stack can thus suppress unreliable joints per frame---a capability with no training-free counterpart.
 
+\subsection{Downstream Utility: Head-Orientation Measurement}
+\label{sec:downstream}
+To verify that pose-level gains translate into a DMS-relevant signal, we evaluate head orientation---the quantity behind mirror checks, glance behavior, and attention estimation---on all 88 in-cabin drives, with identical measurement code for every keypoint source. Head yaw is computed from the five head keypoints (nose, eyes, ears) in the canonical body frame; a head turn is a $|\mathrm{yaw}|>15^\circ$ excursion lasting $\geq0.2$\,s. As an independent check signal we use the per-view estimator's head rotation matrix (a different output head than the keypoints), brought into the cabin frame through the self-calibrated extrinsics and averaged over the three views; it does not depend on nose/ear visibility. Human glance annotations (three raters) are deliberately \emph{not} used as a head-turn reference: they mark eye-movement events, only 9\% of which reach a $15^\circ$ head rotation, and the keypoint yaw during labelled left/right glances deviates from the resting yaw by $<0.5^\circ$ on average with chance-level direction agreement (47--50\% for every source)---i.e., they carry no head-orientation information.
+
+\begin{table}[t]
+\centering
+\caption{Head-yaw measurement validity on the 88 in-cabin drives: per-drive Pearson correlation between keypoint yaw and the independent head-rotation signal (mean / minimum over drives), number of drives where the measurement fails ($r<0.5$), and the resulting head-turn rate. Same code and thresholds for every source.}
+\label{tab:downstream}
+\scriptsize
+\setlength{\tabcolsep}{1.6pt}
+\begin{tabular}{lcccc}
+\toprule
+Keypoint source & $r$ mean & $r$ min & Failed drives & Turns/min \\
+\midrule
+Front only & 0.76 & 0.16 & 4 & 2.44 \\
+Left only & 0.83 & 0.52 & 0 & 2.38 \\
+Right only & 0.80 & 0.21 & 3 & 2.29 \\
+Median fusion & 0.83 & 0.44 & 1 & 2.20 \\
+Mean fusion & \best{0.86} & 0.50 & 1 & 2.12 \\
+Residual-only + aug.\ (8K) & \best{0.86} & 0.56 & \best{0} & 2.28 \\
+\textbf{\method{} (full)} & \best{0.86} & \best{0.61} & \best{0} & 2.53 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/yaw_trace.pdf}
+\caption{Head yaw over a 40\,s window of one night-time, low-illumination drive (subject 17): the front camera alone (red) halves the amplitude of the large turns and misses the turn around $t{=}20$\,s, while the fused keypoints (blue) track the independent head-rotation reference (dashed), with some over-estimation of the largest excursions; window correlation with the reference 0.23 vs.\ 0.82.}
+\label{fig:yaw}
+\end{figure}
+
+Table~\ref{tab:downstream} shows that single cameras are not a reliable source of head orientation: the front and right cameras each fail outright on 3--4 drives ($r$ as low as 0.16), the characteristic signature of steering-wheel and self-occlusion of the ears from one viewpoint. Training-free fusion already removes most failures, and the learned models remove all of them while raising the worst-case correlation to 0.61---the real-occlusion counterpart of the synthetic corruption results in Sec.~\ref{sec:robustness}. The measurement itself is stable across illumination: the head-turn rate, peak angle, and yaw spread do not differ significantly between the four lighting conditions (Friedman test, $p>0.4$), consistent with the illumination breakdown of Table~\ref{tab:groups}. Fig.~\ref{fig:yaw} illustrates the typical failure: the front view systematically under-estimates turn amplitude and drops entire turns. Two caveats apply. The validation targets the head signal; utility for hand-related functions is supported only indirectly, by the per-joint hand improvements. And the check signal, although a separate output head and multi-view consistent (8--22$^\circ$ across views), comes from the same estimator family and is therefore only partially independent.
+
 \subsection{Ablations, Capacity, and Efficiency}
 \label{sec:ablation}
 Table~\ref{tab:ablation} isolates the contributions. Removing corruption augmentation leaves clean accuracy unchanged but destroys robustness (Sec.~\ref{sec:robustness}); removing the skeleton-attention layer or the temporal convolution changes accuracy by $\leq 0.3\%$---consistent with the residual head being the active ingredient---so deployments free to drop them can use a 19.4K variant. Capacity beyond 8--28K parameters does not help: a 92K residual variant is flat, and the v1 backbone at its original capacity (870K) is the \emph{worst} learned model ($-4.2\%$ on average, with a per-fold range of $-21\%$ to $+26\%$), overfitting 68 training sequences. Multi-scale velocity features, a v1 component, contribute at most $0.6\%$ when re-added. On efficiency: the full model runs in $<$0.6\,ms per frame on one CPU thread (residual-only: 0.08\,ms; both fit in $<$1\,MB), one adaptation fold trains in $\sim$8 CPU-minutes, and no GPU is required anywhere in the fusion pipeline.
@@ -390,7 +424,7 @@ Table~\ref{tab:ablation} isolates the contributions. Removing corruption augment
 \caption{Ablations (5-fold; in-cabin dataset; m).}
 \label{tab:ablation}
 \scriptsize
-\setlength{\tabcolsep}{3.5pt}
+\setlength{\tabcolsep}{2.0pt}
 \begin{tabular}{lcccc}
 \toprule
 Variant & Params & MPJPE & PA-MPJPE & Zero-corr.\ MPJPE \\
