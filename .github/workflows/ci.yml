@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [master, worktree-review-fixes]
+  pull_request:
+    branches: [master]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Install (CPU torch + minimal deps)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy scipy omegaconf pytorch-lightning pytest
+      # Only tests that need no cluster data (/work/...) run here; data-bound
+      # evaluations are run on Pegasus and their outputs are committed under
+      # TriPoseFusion/eval/logs and TriPoseFusion/docs.
+      - name: Unit tests
+        run: |
+          python -m pytest -q \
+            tests/test_review_metric_fixes.py \
+            tests/test_joint_space_alignment.py \
+            tests/test_kpt_cache_equivalence.py \
+            tests/test_loo_teacher.py \
+            tests/test_eval_ablation_logs_pseudo_gt.py \
+            tests/test_eval_trifusion_cuda_import_order.py
