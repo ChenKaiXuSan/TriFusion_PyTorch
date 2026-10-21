@@ -5,6 +5,12 @@
 
 ## 内容
 
+- `paper/` — ACCV 投稿正文与补充材料源码（LLNCS：`main.tex`、`supplementary.tex`、`figures/`、模板文件、
+  `archive/main_bak.tex` 旧版；`main.pdf` / `supplementary.pdf` 为提交版编译结果）。原 Overleaf 克隆
+  `code/TriFusion_accv/` 已于 2026-10-21 删除，内容全部在此。
+- `rebuttal/submitted/` — **实际上传 OpenReview 的最终 rebuttal**（2026-09-02 21:25 的工作副本，含审稿原文）；
+  `rebuttal/official/` 为 git 历史中的版本（措辞略早），两者均保留。
+
 - `rebuttal/official/` — 官方模板版 rebuttal（`rebuttal.tex/.pdf`、`reviews_accv2026_802.txt` 审稿原文）
 - `rebuttal/accv2026_rebuttal_onepage.*`、`accv2026_rebuttal_package.md`、`rebuttal_draft.md` — 工作稿
 - `logs_oldGT/` — ACCV 时期的评估日志（**均基于 v1 名义外参伪 GT，尺度错 2.4×，仅作对照**）：

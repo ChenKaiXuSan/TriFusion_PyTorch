@@ -1,0 +1,148 @@
+% Updated in February 2016 by Hwann-Tzong Chen
+% Updated in May 2014 by Hideo Saito
+% Updated in March 2012 by Yasuyuki Matsushita
+% Updated in April 2002 by Antje Endemann, ...., and in March 2010 by Reinhard Klette
+% Based on CVPR 07 and LNCS style, with modifications by DAF, AZ and elle 2008, AA 2010, ACCV 2010
+
+\documentclass[runningheads]{llncs}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb} % define this before the line numbering.
+\usepackage{ruler}
+\usepackage{color}
+
+%===========================================================
+\begin{document}
+\pagestyle{headings}
+\mainmatter
+
+\def\ACCV20SubNumber{***}  % Insert your submission number here
+
+%===========================================================
+\title{Select-Then-Recognize: Occlusion-Robust View Routing for Synchronized Multi-View Head Motion Classification} % Replace with your title
+\titlerunning{ACCV-20 submission ID \ACCV20SubNumber}
+\authorrunning{ACCV-20 submission ID \ACCV20SubNumber}
+
+\author{Kaixu Chen, Zixin Cui, Itaru Kitahara,}
+\institute{Paper ID \ACCV20SubNumber}
+
+\maketitle
+
+%===========================================================
+\begin{abstract}
+We address synchronized multi-view head-motion recognition with four action classes in the presence of frequent occlusions. Different views often exhibit unequal visual quality due to blur, partial blockage, or missed head regions, which degrades naive fusion. We propose a quality-aware view selection framework that learns per-view reliability without explicit quality labels. In a first stage, cross-view contrastive learning encourages synchronized views to share semantic embeddings; the resulting cross-view similarity provides a quality score for each view. In the second stage, these scores are normalized into weights and used to fuse view features for classification, with an optional hard top-$k$ selection at inference. To better handle occlusion, we incorporate lightweight proxy cues such as head detection confidence and temporal stability, improving robustness in low-quality clips. We evaluate against single-view and naive multi-view baselines, conduct occlusion stress tests, and report ablations on pretraining, proxy usage, and fusion strategy. The proposed method consistently improves accuracy under occlusion and provides interpretable temporal weight shifts that reveal automatic view routing.
+\end{abstract}
+
+%===========================================================
+\section{Introduction}
+
+We study synchronized multi-view head-motion recognition with four action classes under frequent occlusion. In this setting, different views exhibit unequal quality: a view can be temporally blurred, partially occluded, or entirely missing the head region, while other views still carry reliable cues. Naive fusion treats all views equally and therefore degrades under occlusion. We propose a quality-aware view selection framework that assigns per-view quality weights and fuses features accordingly, improving robustness without requiring explicit quality labels.
+
+We focus on a practical two-stage approach that is easy to train and explain: (i) learn view quality scores from cross-view consistency using contrastive learning, and (ii) perform quality-weighted fusion for downstream classification. We further introduce occlusion-aware proxies (e.g., head detection confidence and temporal stability) that improve selection in difficult cases. The method is designed to be light-weight, shared across views, and applicable to existing 3D CNN or video transformer backbones.
+
+%Do not use any additional Latex macros.
+
+%------------------------------------------------------------------------- 
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Multi-view Action Recognition}
+Multi-view action recognition is motivated by the limitations of single-view inputs, including occlusion and view-dependent appearance changes. Common paradigms include early fusion (feature concatenation) and late fusion (logit averaging), sometimes combined with cross-view alignment or view-invariant representation learning. Representative benchmarks such as NTU RGB+D motivate this setting. A key limitation is that most methods implicitly assume all views contribute equally and do not explicitly model view reliability under occlusion.
+
+\subsection{Attention-based Multi-view Fusion}
+Multi-stream CNNs and attention-based fusion learn to weight views through soft attention, gating networks, or cross-view transformers. These mechanisms can improve performance by emphasizing informative views, yet the weights are typically learned implicitly from end-task supervision and are not designed to represent explicit view quality. As a result, attention may overfit to frequently clean views and become brittle when occlusion patterns shift. In contrast, we explicitly model view quality via cross-view consistency and occlusion-aware cues.
+
+\subsection{Dynamic View Selection and Routing}
+Dynamic routing and mixture-of-experts frameworks select experts or modalities with hard attention, Gumbel-softmax, or routing policies. These approaches are often applied to heterogeneous modalities or expert specialization. Our setting is distinct: all inputs are the same modality (RGB) but from synchronized cameras, and reliability varies over time due to occlusion. We focus on selecting and weighting views based on time-varying reliability rather than expert specialization.
+
+\subsection{Video Quality Assessment and Occlusion-Robust Recognition}
+Video quality assessment models often estimate absolute distortion from blur, exposure, or compression artifacts, while occlusion-robust recognition uses data augmentation, part-based models, or visibility masks. These lines of work do not address synchronized multi-view reliability comparison. Different from conventional video quality assessment, we define view quality relatively across synchronized views, enabling competitive reliability modeling without quality annotations.
+
+\subsection{Summary and Positioning}
+In summary, prior works explore multi-view fusion, attention-based weighting, and dynamic routing, yet typically assume consistent view quality and do not explicitly address occlusion-induced reliability variation in synchronized multi-view videos. Existing video quality assessment focuses on absolute distortion rather than relative view comparison. To fill this gap, we propose a cross-view consistency-driven quality learning framework for occlusion-robust multi-view head-motion classification.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Problem Setup}
+We assume $V=3$ synchronized views (front/left/right). For a clip of $T$ frames, the input is $\{x_v\}_{v=1}^{V}$ where $x_v \in \mathbb{R}^{T \times H \times W \times C}$. The task is a four-class classification with label $y \in \{1,\dots,4\}$. Each view is encoded by a shared backbone $E(\cdot)$ to obtain per-view clip features $f_v = E(x_v)$.
+
+\subsection{Stage-1: Learning Quality via Cross-View Consistency}
+We compute a clip-level embedding $z_v$ by temporal pooling, e.g., $z_v = \text{AvgPool}_t(f_v)$. Views from the same clip should express the same action semantics, while heavily occluded views are less consistent. We therefore use an InfoNCE objective to align embeddings of synchronized views:
+\begin{equation}
+\mathcal{L}_{\text{nce}} = - \sum_{v} \log \frac{\exp(\cos(z_v, z_{v^+})/\tau)}{\sum_{z^-} \exp(\cos(z_v, z^-)/\tau)} ,
+\label{equ:nce}
+\end{equation}
+where $v^+$ is a different view of the same clip, $\tau$ is a temperature, and $z^-$ are embeddings from other clips in the batch.
+
+We define a per-view quality score as its average similarity to the other synchronized views:
+\begin{equation}
+q_v = \frac{1}{V-1} \sum_{u \neq v} \cos(z_v, z_u).
+\label{equ:qv}
+\end{equation}
+The quality weights are normalized by a softmax,
+\begin{equation}
+w_v = \frac{\exp(q_v)}{\sum_u \exp(q_u)}.
+\label{equ:wv}
+\end{equation}
+This stage requires no quality annotations and yields an initialization that favors consistent, unoccluded views.
+
+\subsection{Stage-2: Quality-Weighted Fusion for Classification}
+For classification we fuse view features with the learned weights:
+\begin{equation}
+F = \sum_{v=1}^{V} w_v f_v, \quad \hat{y} = C(F),
+\label{equ:fuse}
+\end{equation}
+where $C(\cdot)$ is a classifier head. Training minimizes cross-entropy $\mathcal{L}_{\text{cls}}$ on the four classes. At inference we optionally perform hard selection by taking top-1 or top-2 views to trade accuracy for speed.
+
+\subsection{Occlusion-Aware Quality Proxies}
+To explicitly account for occlusion, we optionally augment the quality estimator with view-specific proxies that do not require additional labels.
+\textbf{Head ROI confidence.} A lightweight head or face detector provides a bounding box and score per frame. We compute clip-level statistics such as detection rate, average score, and normalized area; low values indicate occlusion.
+\textbf{Temporal stability.} Occlusion often induces feature jitter. We measure short-term feature variation,
+\begin{equation}
+s_v = \frac{1}{T-1}\sum_{t=1}^{T-1}\left\|h_v(t+1) - h_v(t)\right\|_2,
+\label{equ:stab}
+\end{equation}
+where $h_v(t)$ is a frame or short-window embedding. These proxy features are concatenated with $z_v$ and passed to a small MLP $g(\cdot)$:
+\begin{equation}
+w_v = \text{softmax}(g([z_v; \text{proxy}_v])).
+\label{equ:proxy}
+\end{equation}
+
+\subsection{End-to-End Variant}
+We also consider a single-stage formulation where a QualityNet directly predicts $w_v$ and the system is trained with $\mathcal{L}_{\text{cls}}$ only. To prevent collapse to a fixed view, we add an entropy regularizer:
+\begin{equation}
+\mathcal{L}_{\text{ent}} = -\sum_v w_v \log w_v,
+\label{equ:ent}
+\end{equation}
+with a schedule that encourages exploration early and sharper selection later. The final loss is $\mathcal{L} = \mathcal{L}_{\text{cls}} + \lambda \mathcal{L}_{\text{ent}}$.
+
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Baselines}
+We compare against (i) single-view classifiers for each view, (ii) naive multi-view fusion (average, concatenation, or late fusion), and (iii) our quality-weighted fusion (soft) and hard top-$k$ selection.
+
+\subsection{Occlusion Robustness Evaluation}
+We conduct two occlusion-focused evaluations. First, we stratify test clips into high- and low-quality groups using $q_v$ or proxy scores, and compare accuracy in the low-quality subset. Second, we perform a synthetic occlusion stress test by randomly masking the head region in one view at test time and examine whether weights shift to other views while preserving accuracy. We visualize $w_v$ over time to demonstrate adaptive selection.
+
+\subsection{Ablations and Additional Metrics}
+We ablate (i) with vs. without Stage-1 pretraining, (ii) feature-only quality vs. proxy-augmented quality, and (iii) soft fusion vs. top-$k$ selection. We also report the distribution of selected views and per-class gains to analyze which motion classes benefit most.
+
+\subsection{Implementation Details}
+We use a shared 3D CNN (e.g., R3D-18) or video transformer as $E(\cdot)$, with clip lengths of 8/16/32 frames. Stage-1 pretraining uses InfoNCE on all clips without labels. Stage-2 fine-tunes the classifier and quality estimator with cross-entropy. The quality MLP has two layers with ReLU and dropout.
+
+\section{Conclusion}
+We presented a quality-aware view selection framework for synchronized multi-view head-motion recognition under occlusion. By learning view reliability from cross-view consistency and optionally augmenting it with occlusion proxies, the model adapts fusion to the most informative views and remains robust when a camera is corrupted. Experiments with occlusion stress tests and ablations validate the benefits of staged training, proxy cues, and top-$k$ selection. Future work includes extending the approach to more cameras and integrating temporal view scheduling for long activities.
+
+%References are listed in alphabetic order by the surname of the first author, or the identifying word (e.g., in case of a website). Have
+%all anonymized references at the beginning of the list.
+
+%here would be your acknowledgement (if any) in the final accepted paper
+
+%===========================================================
+\bibliographystyle{splncs}
+\bibliography{egbib}
+
+%this would normally be the end of your paper, but you may also have an appendix
+%within the given limit of number of pages
+\end{document}
