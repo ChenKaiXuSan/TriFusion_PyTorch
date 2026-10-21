@@ -1,0 +1,103 @@
+\begin{thebibliography}{10}
+
+\bibitem{abouelnaga2017real}
+Abouelnaga, Y., Eraqi, H.M., Moustafa, M.N.:
+\newblock Real-time distracted driver posture classification.
+\newblock In: Proceedings of the Neural Information Processing Systems Workshop on Machine Learning for Intelligent Transportation Systems. (2017)
+
+\bibitem{zhang2018driver}
+Zhang, C., Li, R., Kim, W., Yoon, D., Patras, P.:
+\newblock Driver behavior recognition via interwoven deep convolutional neural nets with multi-stream inputs.
+\newblock arXiv preprint arXiv:1811.09128 (2018)
+
+\bibitem{gorelik2026multiview}
+Gorelik, E., Karrow, K.D., Sivrikaya, F., Albayrak, S., Baumann, C.:
+\newblock Multi-view in-cabin monitoring system for public transport vehicles.
+\newblock arXiv preprint arXiv:2606.11739 (2026)
+
+\bibitem{toshev2014deeppose}
+Toshev, A., Szegedy, C.:
+\newblock Deeppose: Human pose estimation via deep neural networks.
+\newblock In: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. (2014)  1653--1660
+
+\bibitem{martinez2017simple}
+Martinez, J., Hossain, R., Romero, J., Little, J.J.:
+\newblock A simple yet effective baseline for 3d human pose estimation.
+\newblock In: Proceedings of the IEEE International Conference on Computer Vision. (2017)  2640--2649
+
+\bibitem{mehta2017vnect}
+Mehta, D., Sridhar, S., Sotnychenko, O., Rhodin, H., Shafiei, M., Seidel, H.P., Xu, W., Casas, D., Theobalt, C.:
+\newblock Vnect: Real-time 3d human pose estimation with a single rgb camera.
+\newblock ACM Transactions on Graphics \textbf{36} (2017)  44:1--44:14
+
+\bibitem{iskakov2019learnable}
+Iskakov, K., Burkov, E., Lempitsky, V., Malkov, Y.:
+\newblock Learnable triangulation of human pose.
+\newblock In: Proceedings of the IEEE/CVF International Conference on Computer Vision. (2019)  7718--7727
+
+\bibitem{qiu2019cross}
+Qiu, H., Wang, C., Wang, J., Wang, N., Zeng, W.:
+\newblock Cross view fusion for 3d human pose estimation.
+\newblock In: Proceedings of the IEEE/CVF International Conference on Computer Vision. (2019)  4342--4351
+
+\bibitem{tu2020voxelpose}
+Tu, H., Wang, C., Zeng, W.:
+\newblock Voxelpose: Towards multi-camera 3d human pose estimation in wild environment.
+\newblock In: Proceedings of the European Conference on Computer Vision. (2020)  197--212
+
+\bibitem{rhodin2018learning}
+Rhodin, H., Sp{\"o}rri, J., Katircioglu, I., Constantin, V., Meyer, F., M{\"u}ller, E., Salzmann, M., Fua, P.:
+\newblock Learning monocular 3d human pose estimation from multi-view images.
+\newblock In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. (2018)  8437--8446
+
+\bibitem{kocabas2019self}
+Kocabas, M., Karagoz, S., Akbas, E.:
+\newblock Self-supervised learning of 3d human pose using multi-view geometry.
+\newblock In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. (2019)  1077--1086
+
+\bibitem{wandt2021canonpose}
+Wandt, B., Rudolph, M., Zell, H., Rhodin, H., Rosenhahn, B.:
+\newblock Canonpose: Self-supervised monocular 3d human pose estimation in the wild.
+\newblock In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. (2021)  13294--13304
+
+\bibitem{zhou2017towards}
+Zhou, X., Huang, Q., Sun, X., Xue, X., Wei, Y.:
+\newblock Towards 3d human pose estimation in the wild: A weakly-supervised approach.
+\newblock In: Proceedings of the IEEE International Conference on Computer Vision. (2017)  398--407
+
+\bibitem{kanazawa2018end}
+Kanazawa, A., Black, M.J., Jacobs, D.W., Malik, J.:
+\newblock End-to-end recovery of human shape and pose.
+\newblock In: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. (2018)  7122--7131
+
+\bibitem{pavllo20193d}
+Pavllo, D., Feichtenhofer, C., Grangier, D., Auli, M.:
+\newblock 3d human pose estimation in video with temporal convolutions and semi-supervised training.
+\newblock In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. (2019)  7753--7762
+
+\bibitem{kocabas2020vibe}
+Kocabas, M., Athanasiou, N., Black, M.J.:
+\newblock Vibe: Video inference for human body pose and shape estimation.
+\newblock In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. (2020)  5253--5263
+
+\bibitem{he2020epipolar}
+He, Y., Yan, R., Fragkiadaki, K., Yu, S.I.:
+\newblock Epipolar transformers.
+\newblock In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. (2020)  7779--7788
+
+\bibitem{bultmann2021real}
+Bultmann, S., Behnke, S.:
+\newblock Real-time multi-view 3d human pose estimation using semantic feedback to smart edge sensors.
+\newblock arXiv preprint arXiv:2106.14729 (2021)
+
+\bibitem{nogueira2024markerless}
+Nogueira, A.F.R., Oliveira, H.P., Teixeira, L.F.:
+\newblock Markerless multi-view 3d human pose estimation: A survey.
+\newblock arXiv preprint arXiv:2407.03817 (2024)
+
+\bibitem{fan2023humanm3}
+Fan, B., Wang, S., Guo, W., Zheng, W., Feng, J., Zhou, J.:
+\newblock Human-m3: A multi-view multi-modal dataset for 3d human pose estimation in outdoor scenes.
+\newblock arXiv preprint arXiv:2308.00628 (2023)
+
+\end{thebibliography}
