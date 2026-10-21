@@ -105,7 +105,7 @@ class SeqStore(_BaseSeqStore):
             "gt_pose": torch.from_numpy(np.stack(gp)),
             "gt_valid": torch.from_numpy(np.stack(gv)),
         }
-DEFAULT_CACHE = Path("/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache")
+DEFAULT_CACHE = Path("/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache_perseq")  # v3 参考；v1 缓存已移至 _legacy/
 DEFAULT_INDEX = Path("/work/1/SKIING/chenkaixu/data/drive/index_mapping")
 DEFAULT_DA_ROOT = Path("/work/1/SKIING/chenkaixu/data/drive/driveandact/tripose_eval_dense")
 DEFAULT_OUT = SCRIPT_DIR / "logs" / "learned_fusion_experiments"

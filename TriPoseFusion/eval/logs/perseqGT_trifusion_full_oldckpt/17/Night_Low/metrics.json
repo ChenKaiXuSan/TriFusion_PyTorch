@@ -1,0 +1,48 @@
+{
+  "person_id": "17",
+  "environment": "夜少ない",
+  "environment_name": "Night_Low",
+  "total_frames": 565,
+  "mean_sam3d_confidence": null,
+  "mean_valid_ratio": null,
+  "valid_ratio_range": null,
+  "view_weights": {
+    "front": 0.33333484846933753,
+    "left": 0.3333259288716105,
+    "right": 0.3333392226063045
+  },
+  "metrics": {
+    "mpjpe_m": 0.28079639106197696,
+    "median_error_m": null,
+    "root_mpjpe_m": null,
+    "pa_mpjpe_m": 0.04413332347057562,
+    "pck": {
+      "0.02": 0.024010996250188456,
+      "0.05": 0.03897253093927835,
+      "0.10": 0.10276613645585238
+    },
+    "auc_0.15": null
+  },
+  "cameras": {
+    "fusion": {
+      "num_frames": 565,
+      "num_keypoints": null,
+      "mean_sam3d_confidence": null,
+      "valid_ratio": null,
+      "metrics": {
+        "num_valid_points": 689,
+        "mpjpe_m": 0.28079639106197696,
+        "median_error_m": null,
+        "root_mpjpe_m": null,
+        "pa_mpjpe_m": 0.04413332347057562,
+        "pck": {
+          "0.02": 0.024010996250188456,
+          "0.05": 0.03897253093927835,
+          "0.10": 0.10276613645585238
+        },
+        "auc_0.15": null
+      },
+      "frame_ids": []
+    }
+  }
+}

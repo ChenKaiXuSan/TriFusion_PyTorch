@@ -1,0 +1,1059 @@
+{
+  "subjects": [
+    {
+      "person_id": "02",
+      "environments": {
+        "夜多い": {
+          "person_id": "02",
+          "environment": "夜多い",
+          "environment_name": "Night_High",
+          "total_frames": 385,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333224979313936,
+            "left": 0.33331803338868277,
+            "right": 0.3333497185211677
+          },
+          "metrics": {
+            "mpjpe_m": 0.05731908945100648,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.018292099862758603,
+            "pck": {
+              "0.02": 0.4163479169371066,
+              "0.05": 0.655652398916034,
+              "0.10": 0.8362886092105469
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 385,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 223,
+                "mpjpe_m": 0.05731908945100648,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.018292099862758603,
+                "pck": {
+                  "0.02": 0.4163479169371066,
+                  "0.05": 0.655652398916034,
+                  "0.10": 0.8362886092105469
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "夜少ない": {
+          "person_id": "02",
+          "environment": "夜少ない",
+          "environment_name": "Night_Low",
+          "total_frames": 382,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333314767994804,
+            "left": 0.33331771397777876,
+            "right": 0.3333491383422732
+          },
+          "metrics": {
+            "mpjpe_m": 0.030652396441851765,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.013512934667804323,
+            "pck": {
+              "0.02": 0.5146232655184119,
+              "0.05": 0.7985769035538454,
+              "0.10": 0.9687852130822486
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 382,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 176,
+                "mpjpe_m": 0.030652396441851765,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.013512934667804323,
+                "pck": {
+                  "0.02": 0.5146232655184119,
+                  "0.05": 0.7985769035538454,
+                  "0.10": 0.9687852130822486
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼多い": {
+          "person_id": "02",
+          "environment": "昼多い",
+          "environment_name": "Day_High",
+          "total_frames": 543,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333347533069702,
+            "left": 0.33332198693607396,
+            "right": 0.333343259098341
+          },
+          "metrics": {
+            "mpjpe_m": 0.025404125311399912,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.014604419301749374,
+            "pck": {
+              "0.02": 0.49440620724338197,
+              "0.05": 0.8547266906137625,
+              "0.10": 0.9837481484338504
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 543,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 184,
+                "mpjpe_m": 0.025404125311399912,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.014604419301749374,
+                "pck": {
+                  "0.02": 0.49440620724338197,
+                  "0.05": 0.8547266906137625,
+                  "0.10": 0.9837481484338504
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼少ない": {
+          "person_id": "02",
+          "environment": "昼少ない",
+          "environment_name": "Day_Low",
+          "total_frames": 610,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333265283068675,
+            "left": 0.333319797085934,
+            "right": 0.3333475484222662
+          },
+          "metrics": {
+            "mpjpe_m": 0.03777347698380224,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.018139785202983462,
+            "pck": {
+              "0.02": 0.5025131456553936,
+              "0.05": 0.787270236784806,
+              "0.10": 0.9187054667316499
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 610,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 231,
+                "mpjpe_m": 0.03777347698380224,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.018139785202983462,
+                "pck": {
+                  "0.02": 0.5025131456553936,
+                  "0.05": 0.787270236784806,
+                  "0.10": 0.9187054667316499
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "person_id": "07",
+      "environments": {
+        "夜多い": {
+          "person_id": "07",
+          "environment": "夜多い",
+          "environment_name": "Night_High",
+          "total_frames": 589,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333399907032785,
+            "left": 0.3333187357780282,
+            "right": 0.3333472674285617
+          },
+          "metrics": {
+            "mpjpe_m": 0.25221427456050455,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.04799163988546321,
+            "pck": {
+              "0.02": 0.06302735428618353,
+              "0.05": 0.14957591009615637,
+              "0.10": 0.2719489577367067
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 589,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 466,
+                "mpjpe_m": 0.25221427456050455,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.04799163988546321,
+                "pck": {
+                  "0.02": 0.06302735428618353,
+                  "0.05": 0.14957591009615637,
+                  "0.10": 0.2719489577367067
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "夜少ない": {
+          "person_id": "07",
+          "environment": "夜少ない",
+          "environment_name": "Night_Low",
+          "total_frames": 551,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333595007820266,
+            "left": 0.3333186366056141,
+            "right": 0.3333454136407094
+          },
+          "metrics": {
+            "mpjpe_m": 0.07835552717361281,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.0258441174761164,
+            "pck": {
+              "0.02": 0.1894957949753898,
+              "0.05": 0.42865164097932634,
+              "0.10": 0.7227801773054846
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 551,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 472,
+                "mpjpe_m": 0.07835552717361281,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.0258441174761164,
+                "pck": {
+                  "0.02": 0.1894957949753898,
+                  "0.05": 0.42865164097932634,
+                  "0.10": 0.7227801773054846
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼多い": {
+          "person_id": "07",
+          "environment": "昼多い",
+          "environment_name": "Day_High",
+          "total_frames": 540,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333334363721035,
+            "left": 0.33331773264540565,
+            "right": 0.333348836335871
+          },
+          "metrics": {
+            "mpjpe_m": 0.11206916674833607,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.0267654479050112,
+            "pck": {
+              "0.02": 0.16990049092995899,
+              "0.05": 0.3201061091627236,
+              "0.10": 0.5223469282741899
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 540,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 405,
+                "mpjpe_m": 0.11206916674833607,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.0267654479050112,
+                "pck": {
+                  "0.02": 0.16990049092995899,
+                  "0.05": 0.3201061091627236,
+                  "0.10": 0.5223469282741899
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼少ない": {
+          "person_id": "07",
+          "environment": "昼少ない",
+          "environment_name": "Day_Low",
+          "total_frames": 537,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333331879845767,
+            "left": 0.3333177613146478,
+            "right": 0.33334905580657376
+          },
+          "metrics": {
+            "mpjpe_m": 0.0930854473471142,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.024990453050095496,
+            "pck": {
+              "0.02": 0.30951346727556356,
+              "0.05": 0.461133628424597,
+              "0.10": 0.6510392102504797
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 537,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 320,
+                "mpjpe_m": 0.0930854473471142,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.024990453050095496,
+                "pck": {
+                  "0.02": 0.30951346727556356,
+                  "0.05": 0.461133628424597,
+                  "0.10": 0.6510392102504797
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "person_id": "12",
+      "environments": {
+        "夜多い": {
+          "person_id": "12",
+          "environment": "夜多い",
+          "environment_name": "Night_High",
+          "total_frames": 499,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333526715964734,
+            "left": 0.3333247933454647,
+            "right": 0.3333399414060589
+          },
+          "metrics": {
+            "mpjpe_m": 0.2564404022418903,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.05173399608082069,
+            "pck": {
+              "0.02": 0.038067550359215434,
+              "0.05": 0.13226138137818458,
+              "0.10": 0.18969665983605957
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 499,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 651,
+                "mpjpe_m": 0.2564404022418903,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.05173399608082069,
+                "pck": {
+                  "0.02": 0.038067550359215434,
+                  "0.05": 0.13226138137818458,
+                  "0.10": 0.18969665983605957
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "夜少ない": {
+          "person_id": "12",
+          "environment": "夜少ない",
+          "environment_name": "Night_Low",
+          "total_frames": 442,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.333335820838337,
+            "left": 0.33332482829892257,
+            "right": 0.33333934573835916
+          },
+          "metrics": {
+            "mpjpe_m": 0.1789133529857273,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.04232353148602657,
+            "pck": {
+              "0.02": 0.09235534536319351,
+              "0.05": 0.17203093780314221,
+              "0.10": 0.26568718836116034
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 442,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 641,
+                "mpjpe_m": 0.1789133529857273,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.04232353148602657,
+                "pck": {
+                  "0.02": 0.09235534536319351,
+                  "0.05": 0.17203093780314221,
+                  "0.10": 0.26568718836116034
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼多い": {
+          "person_id": "12",
+          "environment": "昼多い",
+          "environment_name": "Day_High",
+          "total_frames": 367,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333350583220698,
+            "left": 0.33332438632967687,
+            "right": 0.3333405555106639
+          },
+          "metrics": {
+            "mpjpe_m": 0.28047518927492304,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.048614084436393236,
+            "pck": {
+              "0.02": 0.040208554276003824,
+              "0.05": 0.07654786074397024,
+              "0.10": 0.13626363325346394
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 367,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 807,
+                "mpjpe_m": 0.28047518927492304,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.048614084436393236,
+                "pck": {
+                  "0.02": 0.040208554276003824,
+                  "0.05": 0.07654786074397024,
+                  "0.10": 0.13626363325346394
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼少ない": {
+          "person_id": "12",
+          "environment": "昼少ない",
+          "environment_name": "Day_Low",
+          "total_frames": 413,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333346345089827,
+            "left": 0.3333248044330329,
+            "right": 0.33334056127446615
+          },
+          "metrics": {
+            "mpjpe_m": 0.342337896618947,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.04116464829293348,
+            "pck": {
+              "0.02": 0.022971098403701193,
+              "0.05": 0.0494967971231617,
+              "0.10": 0.10809226119417255
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 413,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 767,
+                "mpjpe_m": 0.342337896618947,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.04116464829293348,
+                "pck": {
+                  "0.02": 0.022971098403701193,
+                  "0.05": 0.0494967971231617,
+                  "0.10": 0.10809226119417255
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "person_id": "17",
+      "environments": {
+        "夜多い": {
+          "person_id": "17",
+          "environment": "夜多い",
+          "environment_name": "Night_High",
+          "total_frames": 559,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333321719668632,
+            "left": 0.3333263041614846,
+            "right": 0.3333415225388112
+          },
+          "metrics": {
+            "mpjpe_m": 0.317298593242821,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.07405086460794874,
+            "pck": {
+              "0.02": 0.027080573511438208,
+              "0.05": 0.05820993304399237,
+              "0.10": 0.12216457004837146
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 559,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 714,
+                "mpjpe_m": 0.317298593242821,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.07405086460794874,
+                "pck": {
+                  "0.02": 0.027080573511438208,
+                  "0.05": 0.05820993304399237,
+                  "0.10": 0.12216457004837146
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "夜少ない": {
+          "person_id": "17",
+          "environment": "夜少ない",
+          "environment_name": "Night_Low",
+          "total_frames": 565,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333484846933753,
+            "left": 0.3333259288716105,
+            "right": 0.3333392226063045
+          },
+          "metrics": {
+            "mpjpe_m": 0.28079639106197696,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.04413332347057562,
+            "pck": {
+              "0.02": 0.024010996250188456,
+              "0.05": 0.03897253093927835,
+              "0.10": 0.10276613645585238
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 565,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 689,
+                "mpjpe_m": 0.28079639106197696,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.04413332347057562,
+                "pck": {
+                  "0.02": 0.024010996250188456,
+                  "0.05": 0.03897253093927835,
+                  "0.10": 0.10276613645585238
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼多い": {
+          "person_id": "17",
+          "environment": "昼多い",
+          "environment_name": "Day_High",
+          "total_frames": 473,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333328939643521,
+            "left": 0.3333261580094223,
+            "right": 0.3333409458209798
+          },
+          "metrics": {
+            "mpjpe_m": 0.31152101728994297,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.12055703466777822,
+            "pck": {
+              "0.02": 0.08419964685012246,
+              "0.05": 0.1394281356770695,
+              "0.10": 0.21184677882691014
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 473,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 654,
+                "mpjpe_m": 0.31152101728994297,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.12055703466777822,
+                "pck": {
+                  "0.02": 0.08419964685012246,
+                  "0.05": 0.1394281356770695,
+                  "0.10": 0.21184677882691014
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼少ない": {
+          "person_id": "17",
+          "environment": "昼少ない",
+          "environment_name": "Day_Low",
+          "total_frames": 583,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333394641941655,
+            "left": 0.333325357267419,
+            "right": 0.33334069605756994
+          },
+          "metrics": {
+            "mpjpe_m": 0.4785241630458709,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.399994842653797,
+            "pck": {
+              "0.02": 0.02566616125021443,
+              "0.05": 0.05461231833819051,
+              "0.10": 0.14106589661812088
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 583,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 670,
+                "mpjpe_m": 0.4785241630458709,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.399994842653797,
+                "pck": {
+                  "0.02": 0.02566616125021443,
+                  "0.05": 0.05461231833819051,
+                  "0.10": 0.14106589661812088
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "person_id": "24",
+      "environments": {
+        "夜多い": {
+          "person_id": "24",
+          "environment": "夜多い",
+          "environment_name": "Night_High",
+          "total_frames": 430,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333397669154544,
+            "left": 0.33332492404205855,
+            "right": 0.33333530724048616
+          },
+          "metrics": {
+            "mpjpe_m": 0.12760962677556414,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.04326959144930507,
+            "pck": {
+              "0.02": 0.07129135663772738,
+              "0.05": 0.24144503610251947,
+              "0.10": 0.5050017385808534
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 430,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 648,
+                "mpjpe_m": 0.12760962677556414,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.04326959144930507,
+                "pck": {
+                  "0.02": 0.07129135663772738,
+                  "0.05": 0.24144503610251947,
+                  "0.10": 0.5050017385808534
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "夜少ない": {
+          "person_id": "24",
+          "environment": "夜少ない",
+          "environment_name": "Night_Low",
+          "total_frames": 392,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333524308946666,
+            "left": 0.33332615482563877,
+            "right": 0.3333386010205259
+          },
+          "metrics": {
+            "mpjpe_m": 0.07307589625017907,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.026188116356711453,
+            "pck": {
+              "0.02": 0.2873205022259178,
+              "0.05": 0.5263406979870431,
+              "0.10": 0.7751531878448262
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 392,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 408,
+                "mpjpe_m": 0.07307589625017907,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.026188116356711453,
+                "pck": {
+                  "0.02": 0.2873205022259178,
+                  "0.05": 0.5263406979870431,
+                  "0.10": 0.7751531878448262
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼多い": {
+          "person_id": "24",
+          "environment": "昼多い",
+          "environment_name": "Day_High",
+          "total_frames": 419,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.3333351927896104,
+            "left": 0.333326561852116,
+            "right": 0.333338245998419
+          },
+          "metrics": {
+            "mpjpe_m": 0.20520477059135003,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.05339464943118056,
+            "pck": {
+              "0.02": 0.10917324038013496,
+              "0.05": 0.1732753036290336,
+              "0.10": 0.29758653899116844
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 419,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 520,
+                "mpjpe_m": 0.20520477059135003,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.05339464943118056,
+                "pck": {
+                  "0.02": 0.10917324038013496,
+                  "0.05": 0.1732753036290336,
+                  "0.10": 0.29758653899116844
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        },
+        "昼少ない": {
+          "person_id": "24",
+          "environment": "昼少ない",
+          "environment_name": "Day_Low",
+          "total_frames": 386,
+          "mean_sam3d_confidence": null,
+          "mean_valid_ratio": null,
+          "valid_ratio_range": null,
+          "view_weights": {
+            "front": 0.33333914375675777,
+            "left": 0.333325274867715,
+            "right": 0.33333557998578167
+          },
+          "metrics": {
+            "mpjpe_m": 0.17545127315649406,
+            "median_error_m": null,
+            "root_mpjpe_m": null,
+            "pa_mpjpe_m": 0.050748659746595925,
+            "pck": {
+              "0.02": 0.09410358001260868,
+              "0.05": 0.18480702459696352,
+              "0.10": 0.32423233800601464
+            },
+            "auc_0.15": null
+          },
+          "cameras": {
+            "fusion": {
+              "num_frames": 386,
+              "num_keypoints": null,
+              "mean_sam3d_confidence": null,
+              "valid_ratio": null,
+              "metrics": {
+                "num_valid_points": 662,
+                "mpjpe_m": 0.17545127315649406,
+                "median_error_m": null,
+                "root_mpjpe_m": null,
+                "pa_mpjpe_m": 0.050748659746595925,
+                "pck": {
+                  "0.02": 0.09410358001260868,
+                  "0.05": 0.18480702459696352,
+                  "0.10": 0.32423233800601464
+                },
+                "auc_0.15": null
+              },
+              "frame_ids": []
+            }
+          }
+        }
+      }
+    }
+  ],
+  "summary": {
+    "夜多い": {
+      "subjects": [
+        "02",
+        "07",
+        "12",
+        "17",
+        "24"
+      ],
+      "avg_mpjpe_m": 0.20217639725435732,
+      "avg_median_error_m": 0.0,
+      "avg_root_mpjpe_m": 0.0,
+      "avg_pa_mpjpe_m": 0.04706763837725926,
+      "avg_pck_0.05": 0.24742893190737733,
+      "avg_pck_0.10": 0.3850201070825076,
+      "avg_pck_0.15": 0.0,
+      "avg_auc_0.15": 0.0
+    },
+    "夜少ない": {
+      "subjects": [
+        "02",
+        "07",
+        "12",
+        "17",
+        "24"
+      ],
+      "avg_mpjpe_m": 0.12835871278266958,
+      "avg_median_error_m": 0.0,
+      "avg_root_mpjpe_m": 0.0,
+      "avg_pa_mpjpe_m": 0.030400404691446874,
+      "avg_pck_0.05": 0.39291454225252703,
+      "avg_pck_0.10": 0.5670343806099145,
+      "avg_pck_0.15": 0.0,
+      "avg_auc_0.15": 0.0
+    },
+    "昼多い": {
+      "subjects": [
+        "02",
+        "07",
+        "12",
+        "17",
+        "24"
+      ],
+      "avg_mpjpe_m": 0.1869348538431904,
+      "avg_median_error_m": 0.0,
+      "avg_root_mpjpe_m": 0.0,
+      "avg_pa_mpjpe_m": 0.05278712714842252,
+      "avg_pck_0.05": 0.31281681996531185,
+      "avg_pck_0.10": 0.43035840555591653,
+      "avg_pck_0.15": 0.0,
+      "avg_auc_0.15": 0.0
+    },
+    "昼少ない": {
+      "subjects": [
+        "02",
+        "07",
+        "12",
+        "17",
+        "24"
+      ],
+      "avg_mpjpe_m": 0.2254344514304457,
+      "avg_median_error_m": 0.0,
+      "avg_root_mpjpe_m": 0.0,
+      "avg_pa_mpjpe_m": 0.10700767778928107,
+      "avg_pck_0.05": 0.30746400105354377,
+      "avg_pck_0.10": 0.4286270345600875,
+      "avg_pck_0.15": 0.0,
+      "avg_auc_0.15": 0.0
+    }
+  }
+}

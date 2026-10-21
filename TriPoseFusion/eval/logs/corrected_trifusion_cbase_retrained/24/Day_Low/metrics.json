@@ -1,0 +1,48 @@
+{
+  "person_id": "24",
+  "environment": "昼少ない",
+  "environment_name": "Day_Low",
+  "total_frames": 386,
+  "mean_sam3d_confidence": null,
+  "mean_valid_ratio": null,
+  "valid_ratio_range": null,
+  "view_weights": {
+    "front": 0.33333145182367435,
+    "left": 0.33333558500430743,
+    "right": 0.3333329608557756
+  },
+  "metrics": {
+    "mpjpe_m": 1.9883964273287225,
+    "median_error_m": null,
+    "root_mpjpe_m": null,
+    "pa_mpjpe_m": 0.8308908341770963,
+    "pck": {
+      "0.02": 0.026946443610781214,
+      "0.05": 0.026946443610781214,
+      "0.10": 0.026951573654005564
+    },
+    "auc_0.15": null
+  },
+  "cameras": {
+    "fusion": {
+      "num_frames": 386,
+      "num_keypoints": null,
+      "mean_sam3d_confidence": null,
+      "valid_ratio": null,
+      "metrics": {
+        "num_valid_points": 657,
+        "mpjpe_m": 1.9883964273287225,
+        "median_error_m": null,
+        "root_mpjpe_m": null,
+        "pa_mpjpe_m": 0.8308908341770963,
+        "pck": {
+          "0.02": 0.026946443610781214,
+          "0.05": 0.026946443610781214,
+          "0.10": 0.026951573654005564
+        },
+        "auc_0.15": null
+      },
+      "frame_ids": []
+    }
+  }
+}
