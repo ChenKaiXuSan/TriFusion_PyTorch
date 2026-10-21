@@ -20,7 +20,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install numpy scipy omegaconf pytorch-lightning pytest
+          pip install numpy scipy omegaconf hydra-core pytorch-lightning pytest
       # Only tests that need no cluster data (/work/...) run here; data-bound
       # evaluations are run on Pegasus and their outputs are committed under
       # TriPoseFusion/eval/logs and TriPoseFusion/docs.
