@@ -1,0 +1,48 @@
+{
+  "person_id": "24",
+  "environment": "夜多い",
+  "environment_name": "Night_High",
+  "total_frames": 430,
+  "mean_sam3d_confidence": null,
+  "mean_valid_ratio": null,
+  "valid_ratio_range": null,
+  "view_weights": {
+    "front": 0.3333318117746087,
+    "left": 0.3333353327457295,
+    "right": 0.33333285644996996
+  },
+  "metrics": {
+    "mpjpe_m": 2.2784993050403375,
+    "median_error_m": null,
+    "root_mpjpe_m": null,
+    "pa_mpjpe_m": 1.4493903755102047,
+    "pck": {
+      "0.02": 0.029075186509032583,
+      "0.05": 0.029192992693982844,
+      "0.10": 0.02949257102296796
+    },
+    "auc_0.15": null
+  },
+  "cameras": {
+    "fusion": {
+      "num_frames": 430,
+      "num_keypoints": null,
+      "mean_sam3d_confidence": null,
+      "valid_ratio": null,
+      "metrics": {
+        "num_valid_points": 640,
+        "mpjpe_m": 2.2784993050403375,
+        "median_error_m": null,
+        "root_mpjpe_m": null,
+        "pa_mpjpe_m": 1.4493903755102047,
+        "pck": {
+          "0.02": 0.029075186509032583,
+          "0.05": 0.029192992693982844,
+          "0.10": 0.02949257102296796
+        },
+        "auc_0.15": null
+      },
+      "frame_ids": []
+    }
+  }
+}

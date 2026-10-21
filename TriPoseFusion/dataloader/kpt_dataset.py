@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -35,9 +36,15 @@ class KPTDataset(Dataset):
         transform: Any = None,
         view_name: Optional[List[str]] = None,
         target_t: Optional[int] = None,
+        kpt_cache_root: Optional[Any] = None,
     ) -> None:
         super().__init__()
         self._experiment = experiment
+        # 关键点数组缓存（build_kpt_cache.py 生成）：<root>/<person>/<env>/<view>/{kpt_2d,kpt_3d}.npy + files.txt。
+        # 存在时直接切片 mmap 数组，绕过每帧 ~358KB 的逐文件 np.load；缺失时回退到逐文件读取。
+        cache_root = kpt_cache_root or os.environ.get("TRIFUSION_KPT_CACHE_ROOT")
+        self._kpt_cache_root: Optional[Path] = Path(str(cache_root)) if cache_root else None
+        self._view_array_cache: Dict[str, Optional[Dict[str, Any]]] = {}
         self._index_mapping = index_mapping
         self._transform = transform
         self.view_name = view_name or ["front", "left", "right"]
@@ -69,10 +76,41 @@ class KPTDataset(Dataset):
     def __len__(self) -> int:
         return len(self._valid_source_indices)
 
+    def _view_cache_arrays(self, kpt_dir: Path) -> Optional[Dict[str, Any]]:
+        """返回该视角目录的缓存数组（mmap），无缓存返回 None。"""
+        key = str(kpt_dir)
+        if key in self._view_array_cache:
+            return self._view_array_cache[key]
+        result: Optional[Dict[str, Any]] = None
+        if self._kpt_cache_root is not None:
+            kpt_dir = Path(kpt_dir)
+            cache_dir = self._kpt_cache_root / kpt_dir.parent.parent.name / kpt_dir.parent.name / kpt_dir.name
+            f2d, f3d, flist = cache_dir / "kpt_2d.npy", cache_dir / "kpt_3d.npy", cache_dir / "files.txt"
+            if f2d.exists() and f3d.exists() and flist.exists():
+                names = flist.read_text(encoding="utf-8").split("\n")
+                names = [n for n in names if n]
+                kpt_2d = np.load(f2d, mmap_mode="r")
+                kpt_3d = np.load(f3d, mmap_mode="r")
+                if kpt_2d.shape[0] == kpt_3d.shape[0] == len(names):
+                    result = {
+                        "kpt_2d": kpt_2d,
+                        "kpt_3d": kpt_3d,
+                        "files": [kpt_dir / n for n in names],
+                    }
+                else:
+                    logger.warning("Ignoring inconsistent kpt cache in %s", cache_dir)
+        self._view_array_cache[key] = result
+        return result
+
     def _sorted_npz_files(self, kpt_dir: Path) -> List[Path]:
         cache_key = str(kpt_dir)
         if cache_key not in self._file_list_cache:
-            self._file_list_cache[cache_key] = sorted(kpt_dir.glob("*_sam3d_body.npz"))
+            cached = self._view_cache_arrays(kpt_dir)
+            if cached is not None:
+                # 缓存构建时用同一 sorted(glob) 顺序记录文件名，位置索引语义一致，且免去 ~10k 条目的 glob
+                self._file_list_cache[cache_key] = list(cached["files"])
+            else:
+                self._file_list_cache[cache_key] = sorted(kpt_dir.glob("*_sam3d_body.npz"))
         return self._file_list_cache[cache_key]
 
     @staticmethod
@@ -180,6 +218,31 @@ class KPTDataset(Dataset):
             raise RuntimeError(
                 f"Invalid frame range [{start_idx}, {end_idx}) for {kpt_dir} with {len(npz_files)} frames"
             )
+
+        cached = self._view_cache_arrays(kpt_dir)
+        if cached is not None:
+            pred2d = np.ascontiguousarray(cached["kpt_2d"][start_idx:end_idx], dtype=np.float32)
+            pred3d = np.ascontiguousarray(cached["kpt_3d"][start_idx:end_idx], dtype=np.float32)
+            k = min(pred2d.shape[1], pred3d.shape[1])
+            if self.keep_keypoint_indices is not None:
+                max_index = int(np.max(self.keep_keypoint_indices))
+                if max_index >= k:
+                    raise RuntimeError(
+                        f"KEEP_KEYPOINT_INDICES requires keypoint index {max_index}, "
+                        f"but cache for {kpt_dir} only has {k} aligned 2D/3D keypoints"
+                    )
+                pred2d = pred2d[:, self.keep_keypoint_indices]
+                pred3d = pred3d[:, self.keep_keypoint_indices]
+                k = len(self.keep_keypoint_indices)
+            payload = {
+                "kpt_2d": torch.from_numpy(np.ascontiguousarray(pred2d[:, :k])),
+                "kpt_3d": torch.from_numpy(np.ascontiguousarray(pred3d[:, :k])),
+            }
+            self._kpt_cache[cache_key] = payload
+            self._kpt_cache.move_to_end(cache_key)
+            while len(self._kpt_cache) > self._cache_max_size:
+                del self._kpt_cache[next(iter(self._kpt_cache))]
+            return payload
 
         kpt2d_list: List[np.ndarray] = []
         kpt3d_list: List[np.ndarray] = []

@@ -618,6 +618,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--debug-one", action="store_true", help="Process the first available sequence only.")
     parser.add_argument("--max-frames", type=int, default=None, help="Limit frames per sequence for smoke tests.")
     parser.add_argument("--num-workers", type=int, default=None, help="Override processing.num_workers.")
+    parser.add_argument(
+        "--extrinsics-json",
+        type=Path,
+        default=None,
+        help="Override camera extrinsics with the JSON written by calibrate_extrinsics.py "
+        "(keys: extrinsics.<view>.{R,t,C}). Intrinsics still come from the config.",
+    )
     parser.add_argument("--no-progress", action="store_true", help="Disable tqdm progress bars.")
     return parser.parse_args()
 
@@ -633,6 +640,30 @@ def main() -> None:
     output_root.mkdir(parents=True, exist_ok=True)
 
     k_maps, rt_maps = build_camera_maps(config)
+
+    def load_extrinsics(path: Path) -> Dict[str, Dict[str, np.ndarray]]:
+        with open(path, "r", encoding="utf-8") as f:
+            ext = json.load(f)["extrinsics"]
+        out: Dict[str, Dict[str, np.ndarray]] = {}
+        for view in VIEW_NAMES:
+            if view not in ext:
+                raise KeyError(f"Extrinsics JSON {path} is missing view {view!r}")
+            out[view] = {
+                "R": np.asarray(ext[view]["R"], dtype=np.float64),
+                "t": np.asarray(ext[view]["t"], dtype=np.float64),
+                "C": np.asarray(ext[view]["C"], dtype=np.float64),
+            }
+        return out
+
+    extrinsics_dir: Optional[Path] = None
+    if args.extrinsics_json is not None:
+        if args.extrinsics_json.is_dir():
+            # per-sequence extrinsics: <dir>/<person>_<env>.json (calibrate_extrinsics.py --per-sequence)
+            extrinsics_dir = args.extrinsics_json
+            LOGGER.info("Using per-sequence extrinsics from %s", extrinsics_dir)
+        else:
+            rt_maps = load_extrinsics(args.extrinsics_json)
+            LOGGER.info("Loaded optimized extrinsics from %s", args.extrinsics_json)
 
     if args.person_id or args.env_name:
         if not (args.person_id and args.env_name):
@@ -663,13 +694,20 @@ def main() -> None:
         person_id, env_name = seq
         if not show_progress:
             LOGGER.info("Processing %s/%s", person_id, env_name)
+        seq_rt = rt_maps
+        if extrinsics_dir is not None:
+            seq_file = extrinsics_dir / f"{person_id}_{env_name}.json"
+            if seq_file.exists():
+                seq_rt = load_extrinsics(seq_file)
+            else:
+                LOGGER.warning("No per-sequence extrinsics for %s/%s; using constructed layout", person_id, env_name)
         summary = process_sequence(
             input_root,
             output_root,
             person_id,
             env_name,
             k_maps,
-            rt_maps,
+            seq_rt,
             config,
             max_frames=args.max_frames,
             show_progress=show_progress and num_workers == 1,

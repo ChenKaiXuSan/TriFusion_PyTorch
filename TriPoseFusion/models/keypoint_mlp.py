@@ -141,11 +141,15 @@ class CrossViewAttention(nn.Module):
         # Each configured view has a learnable position embedding.
         self.view_pos_embed = nn.Parameter(torch.randn(1, 1, self.num_views, embed_dim))
 
-    def forward(self, H_views: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, H_views: torch.Tensor, view_mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """Allow views to communicate with positional context.
 
         Args:
             H_views: (B,T,J,V,H) encoded view features from different cameras
+            view_mask: optional (B,V) bool, True = view available. Masked views are
+                excluded as attention keys (leave-one-view-out self-supervision).
 
         Returns:
             Attended features where each view has incorporated contextual information
@@ -161,8 +165,17 @@ class CrossViewAttention(nn.Module):
         # Reshape to treat views as tokens for attention: (B*T*J, V, H)
         H_reshaped = H_with_pos.reshape(B * T * J, V, H)
 
+        key_padding_mask = None
+        if view_mask is not None:
+            # nn.MultiheadAttention: key_padding_mask True = ignore that key
+            key_padding_mask = (
+                (~view_mask.bool()).unsqueeze(1).expand(B, T * J, V).reshape(B * T * J, V)
+            )
+
         # Multi-head attention among views - each view sees all others with position info
-        attended, _ = self.attention(H_reshaped, H_reshaped, H_reshaped)
+        attended, _ = self.attention(
+            H_reshaped, H_reshaped, H_reshaped, key_padding_mask=key_padding_mask
+        )
 
         # Reshape back to original dimensions for downstream processing
         return attended.reshape(B, T, J, V, H)
@@ -298,21 +311,33 @@ class RobustCanonicalization(nn.Module):
         # Compute shoulder distance and detect outliers
         shoulder_dist = torch.linalg.norm(left_shoulder - right_shoulder, dim=-1, keepdim=True)
         shoulder_outlier = (shoulder_dist < self.eps) | (shoulder_dist > 2 * self.shoulder_prior)
+        valid = ~shoulder_outlier.squeeze(-1).squeeze(-1)  # (B,T)
 
-        # Use midpoint between shoulders if outlier detected (fallback to neck-centered frame)
-        left_valid = torch.where(shoulder_outlier, neck, left_shoulder)
-        right_valid = torch.where(shoulder_outlier, neck, right_shoulder)
-
-        # Compute x-axis from valid shoulder positions
-        x_axis_raw = (right_valid - left_valid).squeeze(2)
+        # Fallback for outlier frames: reuse the shoulder axis of the temporally
+        # nearest valid frame in the same clip (forward fill, then the first valid
+        # frame for a leading invalid prefix). Replacing both shoulders with the
+        # neck would yield a zero x-axis and collapse the rotation to zero.
+        x_axis_raw = (right_shoulder - left_shoulder).squeeze(2)  # (B,T,3)
+        shoulder_mid = 0.5 * (left_shoulder + right_shoulder).squeeze(2)  # (B,T,3)
+        if not bool(valid.all()):
+            idx = torch.arange(T, device=pose.device).expand(B, T)
+            ffill_idx = torch.cummax(torch.where(valid, idx, idx.new_full((), -1)), dim=1).values
+            first_valid = torch.argmax(valid.int(), dim=1, keepdim=True)  # 0 if none valid
+            fallback_idx = torch.where(ffill_idx >= 0, ffill_idx, first_valid).clamp_min(0)
+            gather_idx = fallback_idx.unsqueeze(-1).expand(-1, -1, 3)
+            x_axis_raw = torch.where(valid.unsqueeze(-1), x_axis_raw, x_axis_raw.gather(1, gather_idx))
+            shoulder_mid = torch.where(valid.unsqueeze(-1), shoulder_mid, shoulder_mid.gather(1, gather_idx))
+            # Clips with no valid frame at all: default lateral unit axis.
+            has_valid = valid.any(dim=1).view(B, 1, 1)
+            default_axis = torch.zeros_like(x_axis_raw)
+            default_axis[..., 0] = 1.0
+            x_axis_raw = torch.where(has_valid, x_axis_raw, default_axis)
         x_axis = F.normalize(x_axis_raw, dim=-1, eps=self.eps)
 
         # Compute y-axis (downward direction)
         if mid_hip is not None:
             down_raw = mid_hip.squeeze(2) - neck.squeeze(2)
         else:
-            shoulder_mid = 0.5 * (left_valid + right_valid)
-            shoulder_mid = shoulder_mid.squeeze(2)
             down_raw = shoulder_mid - neck.squeeze(2)
 
         # Clip extreme values to prevent numerical instability
@@ -320,8 +345,15 @@ class RobustCanonicalization(nn.Module):
         down_norm = torch.clip(down_norm, min=self.eps, max=1.0)
         down_axis = down_raw / down_norm
 
-        # Compute z-axis (orthogonal to body plane)
-        z_axis = F.normalize(torch.cross(x_axis, down_axis, dim=-1), dim=-1, eps=self.eps)
+        # Compute z-axis (orthogonal to body plane). If the shoulder and torso
+        # axes are (near-)parallel the cross product degenerates; fall back to a
+        # fixed reference so the rotation matrix always has full rank.
+        z_raw = torch.cross(x_axis, down_axis, dim=-1)
+        ref_z = torch.cross(x_axis, x_axis.new_tensor([0.0, 0.0, 1.0]).expand_as(x_axis), dim=-1)
+        ref_y = torch.cross(x_axis, x_axis.new_tensor([0.0, 1.0, 0.0]).expand_as(x_axis), dim=-1)
+        ref = torch.where(torch.linalg.norm(ref_z, dim=-1, keepdim=True) > self.eps, ref_z, ref_y)
+        z_raw = torch.where(torch.linalg.norm(z_raw, dim=-1, keepdim=True) > self.eps, z_raw, ref)
+        z_axis = F.normalize(z_raw, dim=-1, eps=self.eps)
         y_axis = F.normalize(torch.cross(z_axis, x_axis, dim=-1), dim=-1, eps=self.eps)
 
         # Build rotation matrix and apply to all joints
@@ -748,8 +780,14 @@ class TriViewKeypointFusionNet(nn.Module):
         pose2d: Optional[KptInput] = None,
         conf2d: Optional[KptInput] = None,
         reproj_error: Optional[KptInput] = None,
+        view_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         """Forward pass through the fusion network.
+
+        view_mask: optional (B,V) bool, True = view available. A masked view's
+        encoded features are zeroed, it is excluded from cross-view attention keys
+        and receives gate weight 0, so the fused pose depends only on the remaining
+        views (its canonicalized pose is still returned in P_views as a target).
 
         Processing steps:
         1. Canonicalize each view's pose to body-centered coordinates (IMPROVEMENT #4)
@@ -775,19 +813,35 @@ class TriViewKeypointFusionNet(nn.Module):
             encoded.append(self.view_encoder(feat))
         hidden = torch.stack(encoded, dim=3)  # Shape: (B,T,J,V,H)
 
+        if view_mask is not None:
+            view_mask = view_mask.to(device=hidden.device, dtype=torch.bool)
+            if view_mask.shape != (hidden.shape[0], self.num_views):
+                raise ValueError(
+                    f"view_mask must be (B,V)=({hidden.shape[0]},{self.num_views}), got {tuple(view_mask.shape)}"
+                )
+            hidden = hidden * view_mask[:, None, None, :, None].to(hidden.dtype)
+
         # IMPROVEMENT #1: Cross-view attention before gating.
         # Can be disabled for ablation with model.geofusion_use_cross_view_attention=false.
-        hidden_attended = self.cross_view_attention(hidden)
+        if isinstance(self.cross_view_attention, CrossViewAttention):
+            hidden_attended = self.cross_view_attention(hidden, view_mask=view_mask)
+        else:
+            hidden_attended = self.cross_view_attention(hidden)
 
         # Step 3: Learn view weights with attended features
         if self.use_learned_gate:
             gate_logits = self.gate_head(hidden_attended).squeeze(-1)  # (B,T,J,V)
+            if view_mask is not None:
+                gate_logits = gate_logits.masked_fill(~view_mask[:, None, None, :], -1e4)
             alpha = F.softmax(gate_logits, dim=-1)  # Joint-wise view weights
         else:
             alpha = hidden_attended.new_full(
                 hidden_attended.shape[:-1],
                 1.0 / float(self.num_views),
             )
+            if view_mask is not None:
+                avail = view_mask[:, None, None, :].to(alpha.dtype).expand_as(alpha)
+                alpha = avail / avail.sum(dim=-1, keepdim=True).clamp_min(1.0)
 
         # IMPROVEMENT #2: Gate regularization for stability (computed but not backprop'd in forward)
         # Entropy regularization to prevent views from being completely ignored
@@ -812,4 +866,5 @@ class TriViewKeypointFusionNet(nn.Module):
             "alpha": alpha,          # View weights for interpretability
             "P_views": pose_stack,   # Canonicalized input poses
             "H_views": hidden_attended,  # Attended view features
+            "view_mask": view_mask,  # (B,V) bool or None
         }

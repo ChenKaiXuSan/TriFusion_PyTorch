@@ -1,0 +1,48 @@
+{
+  "person_id": "12",
+  "environment": "昼多い",
+  "environment_name": "Day_High",
+  "total_frames": 367,
+  "mean_sam3d_confidence": null,
+  "mean_valid_ratio": null,
+  "valid_ratio_range": null,
+  "view_weights": {
+    "front": 0.3333326513176068,
+    "left": 0.3333343273125163,
+    "right": 0.3333330208014402
+  },
+  "metrics": {
+    "mpjpe_m": 1.3835095137926148,
+    "median_error_m": null,
+    "root_mpjpe_m": null,
+    "pa_mpjpe_m": 0.4423702870386498,
+    "pck": {
+      "0.02": 0.01999033887030643,
+      "0.05": 0.01999033887030643,
+      "0.10": 0.01999361386233357
+    },
+    "auc_0.15": null
+  },
+  "cameras": {
+    "fusion": {
+      "num_frames": 367,
+      "num_keypoints": null,
+      "mean_sam3d_confidence": null,
+      "valid_ratio": null,
+      "metrics": {
+        "num_valid_points": 806,
+        "mpjpe_m": 1.3835095137926148,
+        "median_error_m": null,
+        "root_mpjpe_m": null,
+        "pa_mpjpe_m": 0.4423702870386498,
+        "pck": {
+          "0.02": 0.01999033887030643,
+          "0.05": 0.01999033887030643,
+          "0.10": 0.01999361386233357
+        },
+        "auc_0.15": null
+      },
+      "frame_ids": []
+    }
+  }
+}

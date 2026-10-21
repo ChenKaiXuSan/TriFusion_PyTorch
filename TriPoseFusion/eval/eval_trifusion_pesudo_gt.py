@@ -80,7 +80,9 @@ def _resolve_ckpt(config: DictConfig) -> Path:
 def _load_module(
     config: DictConfig, ckpt: Path, device: torch.device
 ) -> TriFusionPoseTrainer:
-    payload = torch.load(str(ckpt), map_location="cpu")
+    # Our own Lightning checkpoints embed omegaconf objects in hparams, which
+    # torch>=2.6 rejects under the weights_only=True default.
+    payload = torch.load(str(ckpt), map_location="cpu", weights_only=False)
     state_dict = (
         payload["state_dict"]
         if isinstance(payload, dict) and "state_dict" in payload
@@ -224,22 +226,30 @@ def _apply_joint_selection(
 def _procrustes_align(
     pred: torch.Tensor, gt: torch.Tensor, eps: float = 1e-8
 ) -> torch.Tensor:
+    """Least-squares similarity (Umeyama) alignment of pred onto gt.
+
+    Row-vector convention: aligned = s * (pred_c @ R) + gt_mean with
+    R = U diag(1,1,d) Vt from SVD(pred_c.T @ gt_c). The previous
+    implementation applied the transposed rotation (Vt.T @ U.T), which
+    systematically over-estimates PA-MPJPE. Degenerate inputs fall back to
+    translation-only alignment.
+    """
     pred_mean = pred.mean(dim=0, keepdim=True)
     gt_mean = gt.mean(dim=0, keepdim=True)
     pred_center = pred - pred_mean
     gt_center = gt - gt_mean
 
+    var_pred = (pred_center**2).sum()
+    if float(var_pred) < eps or float((gt_center**2).sum()) < eps:
+        return pred_center + gt_mean
+
     cov = pred_center.transpose(0, 1) @ gt_center
     u, s, v_t = torch.linalg.svd(cov, full_matrices=False)
-    r = v_t.transpose(0, 1) @ u.transpose(0, 1)
-
-    if torch.det(r) < 0:
-        v_t = v_t.clone()
-        v_t[-1, :] *= -1
-        r = v_t.transpose(0, 1) @ u.transpose(0, 1)
-
-    var_pred = (pred_center**2).sum().clamp_min(eps)
-    scale = s.sum() / var_pred
+    signs = torch.ones_like(s)
+    if torch.det(u @ v_t) < 0:
+        signs[-1] = -1.0
+    r = (u * signs) @ v_t
+    scale = (s * signs).sum() / var_pred
     aligned = scale * (pred_center @ r) + gt_mean
     return aligned
 
@@ -251,7 +261,13 @@ def _compute_sample_metrics(
     pck_thresholds: list[float],
 ) -> Dict[str, float]:
     dist = torch.linalg.norm(pred_btj3 - gt_btj3, dim=-1)
-    valid = valid_btj.bool()
+    # Same protocol as the baseline scripts: exclude non-finite pred/gt points,
+    # which would otherwise crash the Procrustes SVD.
+    valid = (
+        valid_btj.bool()
+        & torch.isfinite(pred_btj3).all(dim=-1)
+        & torch.isfinite(gt_btj3).all(dim=-1)
+    )
     valid_count = int(valid.sum().item())
     if valid_count == 0:
         return {}
@@ -259,6 +275,7 @@ def _compute_sample_metrics(
     mpjpe = float(dist[valid].mean().item())
 
     pa_dist_values = []
+    raw_dist_pa_frames = []  # 与 PA 完全同掩码（≥3 有效关节的帧）的未对齐误差
     for frame_idx in range(pred_btj3.shape[0]):
         frame_valid = valid[frame_idx]
         if int(frame_valid.sum().item()) < 3:
@@ -267,15 +284,19 @@ def _compute_sample_metrics(
         gt_frame = gt_btj3[frame_idx][frame_valid]
         pred_aligned = _procrustes_align(pred_frame, gt_frame)
         pa_dist_values.append(torch.linalg.norm(pred_aligned - gt_frame, dim=-1))
+        raw_dist_pa_frames.append(dist[frame_idx][frame_valid])
 
     if pa_dist_values:
         pa_mpjpe = float(torch.cat(pa_dist_values).mean().item())
+        mpjpe_pa_frames = float(torch.cat(raw_dist_pa_frames).mean().item())
     else:
         pa_mpjpe = float("nan")
+        mpjpe_pa_frames = float("nan")
 
     metrics: Dict[str, float] = {
         "mpjpe": mpjpe,
         "pa_mpjpe": pa_mpjpe,
+        "mpjpe_pa_frames": mpjpe_pa_frames,
         "valid_joints": float(valid_count),
     }
     for thr in pck_thresholds:
@@ -678,6 +699,60 @@ def _load_triangulated_sequence(
     )
 
 
+# 52-joint layout after KEEP_KEYPOINT_INDICES (see map_config.py):
+# 0-4 head, 5-6 shoulders, 7-48 hands (right 7-27, left 28-48), 49-51 acromions + neck.
+JOINT_GROUPS = {
+    "head": list(range(0, 5)),
+    "shoulders_neck": [5, 6, 49, 50, 51],
+    "body": list(range(0, 7)) + [49, 50, 51],
+    "hands": list(range(7, 49)),
+}
+
+
+def _save_joint_error_results(
+    output_dir: Path,
+    fold: int,
+    err_sum: torch.Tensor | None,
+    err_count: torch.Tensor | None,
+) -> None:
+    """Per-joint MPJPE (valid-point weighted) plus body/hand group summaries."""
+    if err_sum is None or err_count is None:
+        return
+    err_sum_np = err_sum.detach().cpu().numpy().astype(np.float64)
+    err_count_np = err_count.detach().cpu().numpy().astype(np.float64)
+    per_joint = np.where(err_count_np > 0, err_sum_np / np.maximum(err_count_np, 1.0), np.nan)
+
+    groups = {}
+    for name, idx in JOINT_GROUPS.items():
+        idx = [i for i in idx if i < per_joint.shape[0]]
+        cnt = float(err_count_np[idx].sum())
+        groups[name] = {
+            "joint_indices": idx,
+            "mpjpe": float(err_sum_np[idx].sum() / cnt) if cnt > 0 else None,
+            "count": cnt,
+        }
+
+    payload = {
+        "joints": [
+            {"joint_index": j, "count": float(err_count_np[j]), "mpjpe": (None if np.isnan(per_joint[j]) else float(per_joint[j]))}
+            for j in range(per_joint.shape[0])
+        ],
+        "groups": groups,
+    }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / f"joint_mpjpe_fold_{fold}.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    csv_path = output_dir / f"joint_mpjpe_fold_{fold}.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["joint_index", "count", "mpjpe"])
+        for row in payload["joints"]:
+            writer.writerow([row["joint_index"], row["count"], row["mpjpe"]])
+    logger.info("Saved per-joint MPJPE JSON/CSV: %s", json_path)
+    logger.info("Joint-group MPJPE: %s", {k: v["mpjpe"] for k, v in groups.items()})
+
+
 def _evaluate_fold(
     config: DictConfig,
     fold: int,
@@ -696,6 +771,8 @@ def _evaluate_fold(
     item_records: List[Dict[str, Any]] = []
     joint_alpha_sum: torch.Tensor | None = None
     joint_alpha_count: torch.Tensor | None = None
+    joint_err_sum: torch.Tensor | None = None
+    joint_err_count: torch.Tensor | None = None
     skipped_samples = 0
     split_key = "train" if split == "train" else "val"
     sample_lookup = _build_sample_lookup(fold_dataset[split_key])
@@ -785,6 +862,21 @@ def _evaluate_fold(
                 )
                 if sample_metrics:
                     item_metrics.append(sample_metrics)
+                    pred_sample = pred[sample_idx]
+                    dist_sample = torch.linalg.norm(pred_sample - gt_tensor, dim=-1)
+                    valid_err = (
+                        valid_tensor.bool()
+                        & torch.isfinite(pred_sample).all(dim=-1)
+                        & torch.isfinite(gt_tensor).all(dim=-1)
+                    )
+                    per_joint_err = torch.where(valid_err, dist_sample, torch.zeros_like(dist_sample)).sum(dim=0)
+                    per_joint_err_count = valid_err.sum(dim=0).to(per_joint_err.dtype)
+                    if joint_err_sum is None:
+                        joint_err_sum = torch.zeros_like(per_joint_err)
+                        joint_err_count = torch.zeros_like(per_joint_err_count)
+                    joint_err_sum += per_joint_err
+                    joint_err_count += per_joint_err_count
+
                     alpha_sample = out["alpha"][sample_idx].detach()
                     valid_for_alpha = valid_tensor[: alpha_sample.shape[0], : alpha_sample.shape[1]].bool()
                     alpha_valid = alpha_sample * valid_for_alpha.unsqueeze(-1).to(alpha_sample.dtype)
@@ -827,6 +919,12 @@ def _evaluate_fold(
         view_names=list(module.model.view_names),
         alpha_sum=joint_alpha_sum,
         alpha_count=joint_alpha_count,
+    )
+    _save_joint_error_results(
+        output_dir=output_dir,
+        fold=fold,
+        err_sum=joint_err_sum,
+        err_count=joint_err_count,
     )
 
     logger.info("Fold %d metrics: %s", fold, fold_metrics)
