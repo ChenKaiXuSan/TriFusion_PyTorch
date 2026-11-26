@@ -297,6 +297,83 @@ class SetFusion(torch.nn.Module):
         return pred, weights.reshape(b, t, j, v)
 
 
+class SetResidualFusion(SetFusion):
+    """Hybrid of SetFusion's set-attention gate and ResidualFusion's raw-coordinate corrector.
+
+    Gating is SetFusion's: a masked transformer across the view set gives per-view weights
+    (any subset of views; corrupted views are down-weighted). The corrector no longer reads
+    only the attention-pooled token: every finite view contributes
+    phi([canonical xyz, xyz - fused, |xyz - fused|]) and these per-view features are pooled
+    twice over the view set, with the gate weights and with a plain masked mean (so a
+    down-weighted view stays visible to the corrector). That keeps the head permutation-
+    invariant in the views while handing it the raw coordinates that make ResidualFusion
+    accurate. No joint attention and no feature-level temporal conv (both ablated to
+    <=0.3%); a zero-initialised depthwise conv smooths the fused coordinates instead.
+    """
+
+    def __init__(self, d: int = 32, heads: int = 4, view_layers: int = 2, residual_hidden: int = 64,
+                 num_joints: int = 52, num_views: int = 3, temporal: bool = True, kernel: int = 5,
+                 uncertainty: bool = True) -> None:
+        super().__init__(d=d, heads=heads, view_layers=view_layers, joint_layers=0, num_joints=num_joints,
+                         num_views=num_views, temporal=False, kernel=kernel, uncertainty=uncertainty)
+        gelu = torch.nn.GELU
+        self.phi = torch.nn.Sequential(torch.nn.Linear(7, d), gelu(), torch.nn.Linear(d, d), gelu())
+        self.head = torch.nn.Sequential(
+            torch.nn.Linear(3 + 3 * d, residual_hidden), gelu(),
+            torch.nn.Linear(residual_hidden, residual_hidden), gelu(),
+            torch.nn.Linear(residual_hidden, 4 if uncertainty else 3),
+        )
+        torch.nn.init.zeros_(self.head[-1].weight)
+        torch.nn.init.zeros_(self.head[-1].bias)
+        if uncertainty:
+            with torch.no_grad():
+                self.head[-1].bias[3] = -3.0  # initial scale ~0.05 m
+        self.coord_temporal = temporal
+        if temporal:
+            self.ctconv = torch.nn.Conv1d(3, 3, kernel, padding=kernel // 2, groups=3)
+            torch.nn.init.zeros_(self.ctconv.weight)
+            torch.nn.init.zeros_(self.ctconv.bias)
+
+    def forward(self, view_pose: torch.Tensor, view_conf: torch.Tensor):
+        b, t, j, v, _ = view_pose.shape
+        n = b * t * j
+        finite = torch.isfinite(view_pose).all(dim=-1)  # (B,T,J,V)
+        pose = torch.nan_to_num(view_pose, nan=0.0)
+        n_finite = finite.sum(dim=-1, keepdim=True).clamp_min(1)
+        mean_pose = (pose * finite.unsqueeze(-1)).sum(dim=-2) / n_finite
+        disagreement = torch.linalg.norm(pose - mean_pose.unsqueeze(-2), dim=-1) * finite
+        feats = torch.cat([pose, disagreement.unsqueeze(-1), finite.float().unsqueeze(-1)], dim=-1)
+        x = self.in_proj(feats) + self.view_emb.weight[:v][None, None, None] + self.joint_emb.weight[None, None, :, None]
+        x = x.reshape(n, v, self.d)
+        any_finite = finite.any(dim=-1)  # (B,T,J)
+        fin = finite.reshape(n, v)
+        pad = (~fin) & any_finite.reshape(-1, 1)  # rows with no finite view stay unmasked (avoid NaN)
+        for layer in self.view_layers:
+            x = layer(x, src_key_padding_mask=pad)
+        logits = self.gate(x).squeeze(-1).masked_fill(pad, -1e4)
+        weights = torch.softmax(logits, dim=-1)  # (N,V)
+        pose_n = pose.reshape(n, v, 3)
+        fused = (pose_n * weights.unsqueeze(-1)).sum(dim=1)  # (N,3)
+        pooled = (x * weights.unsqueeze(-1)).sum(dim=1)  # (N,d)
+
+        rel = pose_n - fused.unsqueeze(1)
+        raw = torch.cat([pose_n, rel, torch.linalg.norm(rel, dim=-1, keepdim=True)], dim=-1)  # (N,V,7)
+        ph = self.phi(raw)  # (N,V,d)
+        finf = fin.unsqueeze(-1).to(ph.dtype)
+        gate_pool = (ph * weights.unsqueeze(-1)).sum(dim=1)
+        mean_pool = (ph * finf).sum(dim=1) / finf.sum(dim=1).clamp_min(1.0)
+
+        fused_c = fused.reshape(b, t, j, 3)
+        if self.coord_temporal:
+            ft = fused_c.permute(0, 2, 3, 1).reshape(b * j, 3, t)
+            fused_c = fused_c + self.ctconv(ft).reshape(b, j, 3, t).permute(0, 3, 1, 2)
+        out = self.head(torch.cat([fused_c.reshape(n, 3), pooled, gate_pool, mean_pool], dim=-1)).reshape(b, t, j, -1)
+        pred = fused_c + out[..., :3]
+        self.last_logscale = out[..., 3] if self.uncertainty else None
+        pred = torch.where(any_finite.unsqueeze(-1).expand_as(pred), pred, torch.nan)
+        return pred, weights.reshape(b, t, j, v)
+
+
 def masked_laplace_nll(pred, gt, valid, logscale):
     mask = valid & torch.isfinite(gt).all(dim=-1) & torch.isfinite(pred).all(dim=-1)
     if not mask.any():
@@ -391,6 +468,10 @@ def build_model(args) -> LearnedFusion:
         return SetFusion(d=args.hidden if args.hidden >= 16 else 64, temporal=args.temporal,
                          view_layers=args.view_layers, joint_layers=args.joint_layers,
                          uncertainty=not args.no_uncertainty)
+    if getattr(args, "model", "learned") == "setres":
+        return SetResidualFusion(d=args.hidden if args.hidden >= 16 else 32, view_layers=args.view_layers,
+                                 residual_hidden=getattr(args, "residual_hidden", 0) or 64,
+                                 temporal=args.temporal, uncertainty=not args.no_uncertainty)
     kw = dict(hidden=args.hidden, temporal=args.temporal, joint_emb=args.joint_emb)
     rh = getattr(args, "residual_hidden", 0)
     model = (ResidualFusion(residual_hidden=rh, uncertainty=getattr(args, "residual_uncertainty", False), **kw)
@@ -698,7 +779,7 @@ def main() -> None:
     ap.add_argument("--residual-hidden", type=int, default=0, help=">0: add a per-joint residual refinement MLP of this width")
     ap.add_argument("--residual-uncertainty", action="store_true",
                     help="residual head also predicts per-joint Laplace log-scale (trained with masked NLL)")
-    ap.add_argument("--model", choices=("learned", "setfusion", "tripose"), default="learned")
+    ap.add_argument("--model", choices=("learned", "setfusion", "setres", "tripose"), default="learned")
     ap.add_argument("--refiner-dim", type=int, default=128, help="tripose: TCN channel width")
     ap.add_argument("--tripose-velocity", action="store_true", help="tripose: keep multi-scale velocity features")
     ap.add_argument("--no-cross-view-attention", action="store_true", help="tripose: disable cross-view attention")

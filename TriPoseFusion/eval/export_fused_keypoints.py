@@ -57,7 +57,11 @@ def val_subjects(index_mapping: Path, fold: int) -> set[str]:
 
 
 def build_from_config(cfg: dict):
-    from learned_fusion_experiments import LearnedFusion, ResidualFusion, SetFusion  # noqa: E402
+    from learned_fusion_experiments import LearnedFusion, ResidualFusion, SetFusion, SetResidualFusion  # noqa: E402
+    if cfg.get("model") == "setres":
+        return SetResidualFusion(d=cfg["hidden"] if cfg["hidden"] >= 16 else 32, view_layers=cfg["view_layers"],
+                                 residual_hidden=cfg.get("residual_hidden", 0) or 64, temporal=cfg["temporal"],
+                                 uncertainty=not cfg.get("no_uncertainty", False))
     if cfg.get("model") == "setfusion":
         return SetFusion(d=cfg["hidden"] if cfg["hidden"] >= 16 else 64, temporal=cfg["temporal"],
                          view_layers=cfg["view_layers"], joint_layers=cfg["joint_layers"],
