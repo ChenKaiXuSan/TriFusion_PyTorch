@@ -42,8 +42,10 @@ for p in (str(SCRIPT_DIR), str(REPO_ROOT)):
 from eval_fusion_baselines_pesudo_gt import canonicalize_pose, compute_metrics, fuse_views  # noqa: E402
 from learned_fusion_baseline import LearnedFusion, load_fold_pairs, masked_loss, summarize  # noqa: E402
 from learned_fusion_baseline import SeqStore as _BaseSeqStore  # noqa: E402
+from fusion_baselines import BASELINES  # noqa: E402
 
 VIEWS = ("front", "left", "right")
+DEVICE = torch.device("cpu")  # set from --device in main()
 
 
 class _Seq(dict):
@@ -178,9 +180,10 @@ def learned_rows(model: LearnedFusion, store: SeqStore, pck, corrupt=None) -> tu
     with torch.no_grad():
         for s in store.seqs:
             vp = s["view_pose"] if corrupt is None else corrupt(s["view_pose"])
-            pred, w = model(torch.from_numpy(vp).unsqueeze(0), torch.from_numpy(s["view_conf"]).unsqueeze(0))
-            pred = pred.squeeze(0).numpy()
-            w = w.squeeze(0).numpy()  # (T,J,V)
+            pred, w = model(torch.from_numpy(vp).unsqueeze(0).to(DEVICE),
+                            torch.from_numpy(s["view_conf"]).unsqueeze(0).to(DEVICE))
+            pred = pred.squeeze(0).float().cpu().numpy()
+            w = w.squeeze(0).float().cpu().numpy()  # (T,J,V)
             finite_any = np.isfinite(vp).all(-1).any(-1)  # (T,J)
             wsum += w[finite_any].sum(axis=0)
             wn += int(finite_any.sum())
@@ -391,11 +394,12 @@ def uncertainty_calibration(model, store: SeqStore) -> dict:
     model.eval()
     with torch.no_grad():
         for s in store.seqs:
-            pred, _ = model(torch.from_numpy(s["view_pose"]).unsqueeze(0), torch.from_numpy(s["view_conf"]).unsqueeze(0))
+            pred, _ = model(torch.from_numpy(s["view_pose"]).unsqueeze(0).to(DEVICE),
+                            torch.from_numpy(s["view_conf"]).unsqueeze(0).to(DEVICE))
             ls = model.last_logscale
             if ls is None:
                 return {}
-            pred, ls = pred.squeeze(0).numpy(), ls.squeeze(0).numpy()
+            pred, ls = pred.squeeze(0).float().cpu().numpy(), ls.squeeze(0).float().cpu().numpy()
             gt, valid = s["gt_pose"], s["gt_valid"] & np.isfinite(pred).all(-1) & np.isfinite(s["gt_pose"]).all(-1)
             errs.append(np.linalg.norm(pred - gt, axis=-1)[valid])
             scales.append(ls[valid])
@@ -461,6 +465,8 @@ class _ZeroHead(torch.nn.Module):
 
 
 def build_model(args) -> LearnedFusion:
+    if getattr(args, "model", "learned") in BASELINES:
+        return BASELINES[args.model]()
     if getattr(args, "model", "learned") == "tripose":
         return TriPoseWrapper(hidden=args.hidden, refiner_dim=args.refiner_dim, velocity=args.tripose_velocity,
                               cross_view_attention=not args.no_cross_view_attention, temporal=args.temporal)
@@ -511,7 +517,7 @@ def fold_dir(args, fold: int) -> Path:
 def load_fold_model(args, fold: int) -> LearnedFusion:
     model = build_model(args)
     model.load_state_dict(torch.load(fold_dir(args, fold) / "model.pt", map_location="cpu"))
-    model.eval()
+    model.to(DEVICE).eval()
     return model
 
 
@@ -527,13 +533,15 @@ def cmd_train(args) -> None:
         val_store = SeqStore(args.cache_dir, val_pairs)  # 验证始终用 gt_pose（官方/主参考）
         print(f"[fold {fold}] train {len(train_store.seqs)} / val {len(val_store.seqs)} sequences", flush=True)
 
-        model = build_model(args)
+        model = build_model(args).to(DEVICE)
         n_params = sum(p.numel() for p in model.parameters())
-        opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+        # training-free baselines have no parameters: `train` only evaluates and stores them
+        opt = torch.optim.Adam(model.parameters(), lr=args.lr) if n_params else None
         history, best = [], None
         t0 = time.time()
-        for step in range(1, args.steps + 1):
+        for step in range(1, (args.steps if n_params else 0) + 1):
             batch = augment_batch(train_store.sample_windows(rng, args.batch, args.window), args.augment_prob, rng)
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             pred, _ = model(batch["view_pose"], batch["view_conf"])
             if getattr(model, "last_logscale", None) is not None:
                 loss = masked_laplace_nll(pred, batch["gt_pose"], batch["gt_valid"], model.last_logscale)
@@ -648,9 +656,10 @@ def cmd_driveandact(args) -> None:
                 canon = {c: canonicalize_pose(np.stack([views[c][f][1] for f in w]).astype(np.float32)) for c in VIEWS}
                 vp_arr = np.stack([canon[c] for c in VIEWS], axis=2)  # (T,J,V,3)
                 conf = np.ones(vp_arr.shape[:3], dtype=np.float32)
-                fused, wts = model(torch.from_numpy(vp_arr).unsqueeze(0), torch.from_numpy(conf).unsqueeze(0))
-                fused = fused.squeeze(0).numpy()
-                wts = wts.squeeze(0).numpy()
+                fused, wts = model(torch.from_numpy(vp_arr).unsqueeze(0).to(DEVICE),
+                                   torch.from_numpy(conf).unsqueeze(0).to(DEVICE))
+                fused = fused.squeeze(0).float().cpu().numpy()
+                wts = wts.squeeze(0).float().cpu().numpy()
                 wsum += wts.reshape(-1, len(VIEWS)).sum(axis=0)
                 wn += wts.shape[0] * wts.shape[1]
                 preds["learned"].append(to_hs10(fused[None]).reshape(-1, len(HS10_NAMES), 3))
@@ -779,7 +788,9 @@ def main() -> None:
     ap.add_argument("--residual-hidden", type=int, default=0, help=">0: add a per-joint residual refinement MLP of this width")
     ap.add_argument("--residual-uncertainty", action="store_true",
                     help="residual head also predicts per-joint Laplace log-scale (trained with masked NLL)")
-    ap.add_argument("--model", choices=("learned", "setfusion", "setres", "tripose"), default="learned")
+    ap.add_argument("--model", choices=("learned", "setfusion", "setres", "tripose", *BASELINES), default="learned",
+                    help="fusion model; tf_* / concat_mlp / lift_mlp / tcn / skel_tr are comparison baselines (fusion_baselines.py)")
+    ap.add_argument("--device", default="auto", help="auto (cuda if available) | cpu | cuda")
     ap.add_argument("--refiner-dim", type=int, default=128, help="tripose: TCN channel width")
     ap.add_argument("--tripose-velocity", action="store_true", help="tripose: keep multi-scale velocity features")
     ap.add_argument("--no-cross-view-attention", action="store_true", help="tripose: disable cross-view attention")
@@ -815,6 +826,9 @@ def main() -> None:
 
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
+    global DEVICE
+    DEVICE = torch.device(("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device)
+    print(f"device: {DEVICE}", flush=True)
     args.func(args)
 
 
