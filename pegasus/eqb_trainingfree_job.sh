@@ -44,7 +44,8 @@ for k in 0 1 2 3 4; do
       python ${S} ${A} stress --folds "${k}" --mode noise > /dev/null 2>&1 || echo "!! stress noise failed: fold ${k}" ) \
         > "${LOG}/eqb_${M}_fold${k}.log" 2>&1 &
 done
-python ${S} ${A} driveandact --fold 0 | grep -E '^learned +PA' || echo "!! driveandact failed"
 wait
 grep -h -E 'learned\(last\)|!!' "${LOG}"/eqb_${M}_fold*.log | cut -c1-110
+# Drive&Act needs fold0/model.pt, so it runs after the folds; one fold is enough (no parameters).
+python ${S} ${A} driveandact --fold 0 | grep -E '^learned +PA' || echo "!! driveandact failed"
 python ${S} ${A} summarize > /dev/null && echo "===== eqb_${M} done $(date +%H:%M:%S)"
