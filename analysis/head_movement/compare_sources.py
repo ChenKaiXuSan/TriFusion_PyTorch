@@ -3,7 +3,7 @@
 """Compare the STEP1 head-movement results obtained from different keypoint sources.
 
 Reads <root>/<source>/summary_by_sequence.csv for every source folder present and writes
-  <root>/method_comparison.csv   per-source means of the key measures + per-drive agreement with fused_v3
+  <root>/method_comparison.csv   per-source means of the key measures + per-drive agreement with fused_main
   <root>/method_comparison.md    plain-language table
   <root>/figures_method_comparison/*.png
 """
@@ -16,9 +16,10 @@ from pathlib import Path
 import numpy as np
 
 REF = "fused_main"   # the paper's main model; every other source is compared against it
-SOURCES = ["fused_main", "fused_full", "fused_v3", "fused_mean", "fused_median", "view_front", "view_left", "view_right"]
-LABEL = {"fused_main": "主模型（SetFusion 28K，统一训练量）", "fused_full": "SetFusion 28K（旧，小训练量）",
-         "fused_v3": "残差 8K（旧称 v3）", "fused_mean": "均值融合", "fused_median": "中位数融合",
+# fused_main is the only learned-fusion export in the downstream files; the superseded
+# fused_full / fused_v3 exports live in downstream_analysis/_archive (decision 2026-11-27).
+SOURCES = ["fused_main", "fused_mean", "fused_median", "view_front", "view_left", "view_right"]
+LABEL = {"fused_main": "主模型（SetFusion 28K，统一训练量）", "fused_mean": "均值融合", "fused_median": "中位数融合",
          "view_front": "单视角 front", "view_left": "单视角 left", "view_right": "单视角 right"}
 KEYS = ["ai_horizontal_turns_per_min", "ai_horizontal_peak_deg_mean", "ai_vertical_turns_per_min",
         "ai_horizontal_turn_duration_s_mean", "yaw_p95_abs_deg", "annotated_glances_with_head_turn_ge15",
@@ -56,15 +57,15 @@ def main() -> None:
         row = {"source": s, "label": LABEL[s], "n_sequences": len(d)}
         for k in KEYS:
             row[f"mean_{k}"] = round(float(np.nanmean([d[q][k] for q in d])), 2)
-        # agreement with v3 across drives (Spearman) for the two hypothesis measures
+        # agreement with the main model across drives (Spearman) for the two hypothesis measures
         for k in ("ai_horizontal_turns_per_min", "ai_horizontal_peak_deg_mean"):
             if ref and s != REF:
                 a = np.array([d[q][k] for q in seqs]); b = np.array([ref[q][k] for q in seqs])
                 m = np.isfinite(a) & np.isfinite(b)
                 from scipy.stats import spearmanr
-                row[f"spearman_vs_v3_{k}"] = round(float(spearmanr(a[m], b[m]).correlation), 3) if m.sum() > 5 else None
+                row[f"spearman_vs_main_{k}"] = round(float(spearmanr(a[m], b[m]).correlation), 3) if m.sum() > 5 else None
             else:
-                row[f"spearman_vs_v3_{k}"] = 1.0 if s == REF else None
+                row[f"spearman_vs_main_{k}"] = 1.0 if s == REF else None
         rows.append(row)
 
     cols = list(rows[0].keys())
@@ -82,13 +83,13 @@ def main() -> None:
         for r in rows:
             fh.write(f"| {r['label']} | " + " | ".join(
                 "" if np.isnan(r[f"mean_{k}"]) else f"{r[f'mean_{k}']:.2f}" for k in KEYS) +
-                f" | {r['spearman_vs_v3_ai_horizontal_turns_per_min']} / {r['spearman_vs_v3_ai_horizontal_peak_deg_mean']} |\n")
+                f" | {r['spearman_vs_main_ai_horizontal_turns_per_min']} / {r['spearman_vs_main_ai_horizontal_peak_deg_mean']} |\n")
         fh.write("\n说明：\n- 数值为 88 段的平均；每段的数字在各来源子目录的 `summary_by_sequence.csv`。\n"
                  "- \"与主模型的一致性\"：按段比较该来源与主模型（fused_main）给出的转头频率/峰值角的排序相关（1 = 完全一致）。\n"
                  "- 人工标注帧号已按 24 fps → 29.97 fps 换算；AI 指标按关节点实际覆盖的驾驶时长计算。\n"
                  "- \"与旋转矩阵核对相关\"只在已生成核对信号的段上有值（提取完成后填满）。\n")
 
-    # figure: per-drive AI horizontal turns/min, each source vs v3
+    # figure: per-drive AI horizontal turns/min, each source vs the main model
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -103,7 +104,7 @@ def main() -> None:
             ax.plot([0, lim], [0, lim], "k--", lw=0.7); ax.set_xlabel(f"{REF} turns/min"); ax.set_ylabel(f"{s} turns/min")
             ax.set_title(s)
         fig.suptitle(f"AI horizontal head turns per minute: each source vs {REF} (one point = one drive)")
-        fig.tight_layout(); fig.savefig(args.root / "figures_method_comparison" / "turns_per_min_vs_v3.png", dpi=150)
+        fig.tight_layout(); fig.savefig(args.root / "figures_method_comparison" / "turns_per_min_vs_main.png", dpi=150)
         plt.close(fig)
         fig, ax = plt.subplots(figsize=(9, 4))
         x = np.arange(len(rows))

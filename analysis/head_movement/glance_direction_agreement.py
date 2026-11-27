@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-SOURCES = ["fused_main", "fused_full", "fused_v3", "fused_mean", "fused_median", "view_front", "view_left", "view_right"]
+SOURCES = ["fused_main", "fused_mean", "fused_median", "view_front", "view_left", "view_right"]
 
 
 def runs(mask: np.ndarray):

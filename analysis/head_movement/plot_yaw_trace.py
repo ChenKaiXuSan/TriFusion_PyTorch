@@ -8,7 +8,7 @@ n_views) for the requested sources and draws them on one axis; frames where the 
 has no valid head keypoints (yaw NaN) are shaded.
 
   python analysis/head_movement/plot_yaw_trace.py --sequence 12_夜少ない --start 120 --duration 40 \
-      --fused fused_full --single view_front --out paper_tits/figures/yaw_trace.pdf
+      --fused fused_main --single view_front --out paper_tits/figures/yaw_trace.pdf
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def main() -> None:
     ap.add_argument("--sequence", required=True)
     ap.add_argument("--start", type=float, default=0.0, help="window start (s, time_s of the csv)")
     ap.add_argument("--duration", type=float, default=40.0)
-    ap.add_argument("--fused", default="fused_full")
+    ap.add_argument("--fused", default="fused_main")
     ap.add_argument("--single", default="view_front")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()

@@ -327,12 +327,12 @@ Lifting-MLP 25.2 / 23.6 / 25.0 / 22.6 / 22.9 / 23.1 / 23.1 / 24.0；混合 22.1 
 5. label-free 与数据集参考监督的差距约 1.1 / 1.4 mm（主模型），各模型相近。
 6. 取代 §3 / §8 中旧训练量的 Drive&Act 域内数字（8K 21.6 / 19.3、28K 21.7 / 19.9、混合 22.1 / 20.1）；趋势一致。
 
-## 11. 主模型定稿后的下游文件（2026-11-27，归档决定待定）
+## 11. 主模型定稿后的下游文件（2026-11-27；决定：下游只用 `fused_main`）
 
 - **导出**：`eqb_setfusion` 5 折 → `downstream_analysis/fused_keypoints/*.npz` 新字段 `fused_main / uncertainty_main / gate_main / fold_main`
   （88 段，逐段 MPJPE 与训练日志一致，均值 129.6 mm；`export_fused_keypoints.py` 改为原子写入并支持 GPU，`pegasus/export_main_job.sh`）。
 - **标注时间基准修正**：Label Studio 标注（瞥视与 start/mid/end）帧号为 24 fps，视频 29.97 fps；`run_head_movement_analysis.py` 新增
-  `--label-fps`（默认 24，帧号 ×1.249），并输出关节点对驾驶区间的覆盖率（均值 0.774：SAM3D 只推理了每段前约 79%）、覆盖窗口内的比率。
+  `--label-fps`（默认 24，帧号 ×1.249），并输出关节点对驾驶区间的覆盖率（均值 0.774：SAM3D 只推理了每段前约 77%）、覆盖窗口内的比率。
   修正后 88 段、1692 次左右瞥视的方向一致率：主模型 96.3%（修正前 47–50%）。
 - **88 段头部朝向核对**（对 SAM3D 头部旋转矩阵；修正后）：
 
@@ -349,8 +349,17 @@ Lifting-MLP 25.2 / 23.6 / 25.0 / 22.6 / 22.9 / 23.1 / 23.1 / 24.0；混合 22.1 
   均值融合低估约 22%、8K 低估约 16%。
 - **归档**：旧头部运动分析（标注错位）已移至 `downstream_analysis/_archive/head_movement_analysis_20261021/`；`fused_v3`、`fused_full`
   已抽取到 `_archive/fused_keypoints_{v3_20260904,full_20261021}/` 并逐位校验（`archive_fused_fields.py`）。
-  **从现役文件移除旧字段一步暂停**，等用户在"仍以 `fused_main` 为准 / 改用 10 月版 / 先排查抖动"之间决定。
-- 未解决：每段驾驶最后约 20% 无 SAM3D 推理（约 55 万帧，需另跑）；T-ITS 稿下游一节（原 l.386 "瞥视标签不含头部朝向信息"）需按修正后的结果重写。
+- **决定（用户，2026-11-27）：以 `fused_main` 为准，下游只用这个版本。**已执行：`archive_fused_fields.py strip` 把 `*_v3`、`*_full`
+  从 88 个现役文件移除（移除前逐位核对归档、原子替换、保留字段逐位不变；4.0 → 2.2 GB）；现役字段为 `fused_main / uncertainty_main /
+  gate_main / fold_main` + 均值、中位数、三视角输入、参考、帧号。独立复核：汇总有效关节的 MPJPE 与导出清单逐段一致（129.6 mm；
+  注意"先逐帧平均再对帧平均"的口径是 111.6 mm，论文与全部表格用的是前者）；单段重跑头部分析与存档逐字节相同。
+  头部运动分析目录只留 `fused_main` 与对照来源（均值、中位数、三个单视角），`fused_full/`、`fused_v3/` 两个来源的结果和上面的三版本
+  对比表移至 `_archive/head_movement_analysis_oldsources_20261127/`；`method_comparison`、`glance_direction_agreement` 已按 6 个来源重生成。
+  分析脚本与作业的默认来源同步改为不含旧版本（`compare_sources.py`、`glance_direction_agreement.py`、`run_all_sources.sh`、
+  `pegasus/head_analysis_job.sh`、`plot_yaw_trace.py --fused` 默认 `fused_main`）。数据目录三份 README 已重写。
+  代价（已知并接受）：`fused_main` 的 pitch 比 10 月版更吵（0.40 对 0.53），俯仰类指标不用于结论；yaw 可用。
+- 未解决：每段驾驶最后约 20% 无 SAM3D 推理（约 55 万帧，需另跑）；T-ITS 稿下游一节（原 l.386 "瞥视标签不含头部朝向信息"）需按修正后的结果重写，
+  其中 tab:downstream 与 fig:yaw（`yaw_trace.pdf`）仍是用 `fused_full` 生成的，须改用 `fused_main` 重出。
 
 ## 6. 待办
 

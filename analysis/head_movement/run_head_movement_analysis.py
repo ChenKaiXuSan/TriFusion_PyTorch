@@ -3,7 +3,7 @@
 """STEP1 head-movement analysis on the fused 3D keypoints (for non-CS readers).
 
 Inputs (all already on disk):
-  fused_keypoints_perseq/<person>_<env>.npz   fused_v3 (T,52,3) canonical frame, frame_ids
+  fused_keypoints/<person>_<env>.npz          fused_main (T,52,3) canonical frame, frame_ids
   sam3d_body_triangulated_gt_perseq/<p>/<env>/keypoints_3d.npz   70-joint world-frame reference
   label/person_XX_<day|night>_<high|low>_h265.json   3 annotators, head-turn direction ranges
   annotation/split_mid_end/full.json                  start / mid / end frame of each drive
@@ -234,7 +234,7 @@ def analyse_sequence(name: str, args, splits: dict, det_grid: dict) -> dict:
     kappa_v = fleiss_kappa((V[:, drive] != 0)) if n_raters >= 2 else float("nan")
 
     # --- angles from the selected keypoint source (canonical frame: x = right, y = down, z = fore/aft)
-    #     fused_v3 / fused_mean / fused_median: fused keypoints; view_<cam>: that camera's own SAM3D
+    #     fused_main / fused_mean / fused_median: fused keypoints; view_<cam>: that camera's own SAM3D
     #     keypoints after its per-frame canonicalization (head-vs-torso angles are invariant to it).
     if args.source.startswith("view_"):
         cams = [str(c) for c in f["cameras"]]
@@ -337,7 +337,7 @@ def analyse_sequence(name: str, args, splits: dict, det_grid: dict) -> dict:
             payload["mhr127_n_views"] = n_views_used
             np.savez_compressed(fpath, **payload)
 
-    # Primary = the fused 52-joint keypoints (fused_v3: nose vs ear midpoint).  Validated on
+    # Primary = the fused 52-joint keypoints (fused_main: nose vs ear midpoint).  Validated on
     # subject 01 against the SAM3D head-rotation reference (yaw corr ~0.8; ~25 deg during true
     # turns vs ~3 deg at rest).  Alternatives are kept as validation columns / opt-in.
     if args.prefer_mhr and yaw_mhr is not None:
@@ -509,7 +509,7 @@ def main() -> None:
                     help="per-sequence SAM3D head-joint rotations (extract_sam3d_head_rotation.py)")
     ap.add_argument("--sequences", nargs="*", default=None, help="subset of <person>_<env> names (debug)")
     ap.add_argument("--source", default="fused_main",
-                    choices=["fused_main", "fused_v3", "fused_full", "fused_mean", "fused_median",
+                    choices=["fused_main", "fused_mean", "fused_median",
                              "view_front", "view_left", "view_right"],
                     help="keypoint source for the head angles (all in the canonical body frame); "
                          "fused_main = the paper's main model (SetFusion 27.9K, equal-budget training)")
@@ -517,7 +517,7 @@ def main() -> None:
                     help="frame rate of the annotation frame numbers (Label Studio default 24); "
                          "29.97 reproduces the pre-2026-11-27 (misaligned) behaviour")
     ap.add_argument("--prefer-mhr", action="store_true",
-                    help="use fused MHR head joints as the primary angle source instead of the 52-joint fused_v3")
+                    help="use fused MHR head joints as the primary angle source instead of the 52-joint fused_main")
     ap.add_argument("--export-mhr", action="store_true",
                     help="write the fused 127-joint MHR skeleton (fused_mhr127_mean) into the fused_keypoints_perseq files")
     args = ap.parse_args()

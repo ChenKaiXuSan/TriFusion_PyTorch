@@ -19,7 +19,7 @@
 REPO="${TPF_REPO:-/work/1/SKIING/chenkaixu/code/TriFusion/.claude/worktrees/hybrid-fusion}"
 OUT="${HEAD_OUT:-/work/1/SKIING/chenkaixu/data/drive/downstream_analysis/head_movement_analysis}"
 LABEL_FPS="${HEAD_LABEL_FPS:-24}"
-SOURCES="${HEAD_SOURCES:-fused_main fused_full fused_v3 fused_mean fused_median view_front view_left view_right}"
+SOURCES="${HEAD_SOURCES:-fused_main fused_mean fused_median view_front view_left view_right}"
 LOG="${REPO}/logs/pegasus"
 mkdir -p "${LOG}" "${OUT}"
 exec > "${LOG}/head_analysis.log" 2>&1
