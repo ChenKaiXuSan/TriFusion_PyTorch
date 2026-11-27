@@ -52,7 +52,7 @@ Our contributions are:
 \begin{itemize}
 \item \textbf{A self-calibrated triangulation reference} for in-cabin rigs: per-sequence robust bundle adjustment of the extrinsics from the keypoint observations, with the scale gauge anchored to the estimator's body prior. No calibration target and no manual 3D annotation; the reprojection error drops from 10.3 to 3.6\,px and the shoulder-width spread across sessions from 0.37\,m to 0.015\,m.
 \item \textbf{\method{}}, a 28K-parameter fusion network with masked set attention over any subset of views, corruption-aware gating, reference-supervised residual refinement, and per-joint Laplace uncertainty. It reduces the error of the best training-free fusion by 13.1\%, matches regressors fifty times larger, unlike them tolerates a noisy camera, runs in under 0.6\,ms per frame on one CPU thread, and adapts to a new rig without labels.
-\item \textbf{A controlled benchmark and three lessons}: fourteen fusion methods under one training budget on 88 in-cabin sequences, a single cross-rig protocol on \da{} \cite{martin2019drive}, a downstream check of head-orientation measurement, and three failure modes of learning against pseudo references---gate collapse under consensus supervision, illusory gains from reference scale, and illusory architecture differences from unequal training budgets.
+\item \textbf{A controlled benchmark and three lessons}: fourteen fusion methods under one training budget on 88 in-cabin sequences, a single cross-rig protocol on \da{} \cite{martin2019drive}, an application study validating head-orientation measurement (Sec.~\ref{sec:downstream}), and three failure modes of learning against pseudo references---gate collapse under consensus supervision, illusory gains from reference scale, and illusory architecture differences from unequal training budgets.
 \end{itemize}
 
 \section{Related Work}
@@ -334,34 +334,6 @@ Method & Zero-shot & Rig ref. & Dataset ref. & Noise \\
 \subsection{Uncertainty Calibration}
 The predicted Laplace scale ranks errors well: Spearman $\rho=0.70$ in-cabin (0.69--0.73 across the variants of Table~\ref{tab:ablation}) and 0.45--0.51 on adapted \da{}. The most-confident tenth of joints has a mean error of 13\,mm against 234\,mm for the least-confident tenth (146\,mm overall), so a monitoring stack can suppress unreliable joints per frame---a capability none of the regression baselines offers.
 
-\subsection{Downstream Check: Head-Orientation Measurement}
-\label{sec:downstream}
-To test whether pose-level gains yield a valid DMS signal, we measure head yaw---the quantity behind mirror checks and glance behavior---on all 88 drives with identical code for every keypoint source: yaw of the nose relative to the ear midpoint in the body frame, smoothed over 0.3\,s, with a head turn defined as $|\mathrm{yaw}|>15^\circ$ for $\geq0.2$\,s. The \emph{independent signal} is the estimator's head rotation matrix (a separate output head that does not depend on nose or ear visibility), brought into the cabin frame with the self-calibrated extrinsics and averaged over views. The \emph{human reference} is the left/right glance annotation of three raters (1{,}692 events); the annotation tool counts frames at 24\,fps against 29.97\,fps video, so frame indices are rescaled by 1.249 before comparison. The keypoint streams cover on average the first 77\% of each annotated drive, and all statistics use the covered part.
-
-\begin{table}[t]
-\centering
-\caption{Head-yaw validity on 88 drives. $r$: per-drive correlation with the independent head-rotation signal (mean / minimum); Fail: drives with $r<0.5$; Ampl.: keypoint yaw relative to the independent signal when it exceeds $20^\circ$ (1 = correct amplitude); Glance: agreement (\%) of yaw sign with annotated glance direction; head-turn rate.}
-\label{tab:downstream}
-\scriptsize
-\setlength{\tabcolsep}{2.0pt}
-\begin{tabular}{lcccccc}
-\toprule
-Keypoint source & $r$ mean & $r$ min & Fail & Ampl. & Glance & Turns/min \\
-\midrule
-\tabinput{tables/tab_downstream}
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/yaw_trace.pdf}
-\caption{Head yaw over 30\,s of one daytime drive (subject 9). The front camera alone (red) reaches a third of the main turn's amplitude and mean fusion (green) two thirds; \method{} (blue) tracks the independent head-rotation reference (dashed) in timing and amplitude. Window correlation with the reference: 0.42, 0.83, and 0.90.}
-\label{fig:yaw}
-\end{figure}
-
-Single cameras are unreliable sources of head orientation (Table~\ref{tab:downstream}): the front and right cameras fail on six and four drives ($r$ down to 0.20), the signature of steering-wheel and self-occlusion of the ears. Fusion removes these failures, and \method{} raises the worst-case correlation to 0.59. It does not improve the average correlation over mean fusion (0.84 vs.\ 0.85) and is slightly noisier at rest (3.0$^\circ$ vs.\ 2.2$^\circ$ standard deviation); its advantage is amplitude. For turns beyond $20^\circ$, \method{} recovers 0.97 of the independent signal, whereas averaging (0.78) and every single view (0.71--0.84) under-estimate turns by 16--29\%: per-view estimates are biased toward a frontal head under self-occlusion, averaging preserves the bias, and the residual removes it (Fig.~\ref{fig:yaw}). More turns therefore cross the threshold (2.65 vs.\ 2.10 per minute), which matters for any count-based attention measure. Against the human reference, yaw sign agrees with the annotated direction for 96\% of events with fused keypoints and 95\% with single views, and 93\% of the turns detected from \method{} overlap an annotated glance, while about half of the glances come with a turn of at least $15^\circ$ (the rest are eye-dominant). Head-turn rate, peak angle, and yaw spread do not differ between illumination conditions (Friedman test, $p\geq0.26$). We validate yaw only: head pitch correlates weakly with the reference pitch for every source (0.32--0.45; 0.40 for \method{}), and the independent signal, being a separate output of the same estimator, is only partially independent.
-
 \subsection{Ablations, Capacity, and Training Budget}
 \label{sec:ablation}
 \begin{table}[t]
@@ -393,6 +365,43 @@ Variant & Params & MPJPE & PA-MPJPE & Zero & Noise \\
 \end{table}
 
 Removing corruption augmentation leaves clean accuracy unchanged but destroys robustness (Sec.~\ref{sec:robustness}). Removing the skeleton-attention layer leaves MPJPE unchanged (128.7\,mm) but raises PA-MPJPE from 40.5 to 42.7\,mm (paired difference 2.2\,mm, $[0.4,4.4]$): attention across joints makes the predicted shape more coherent, the quantity on which whole-skeleton regressors lead. Removing the temporal convolution costs 2.1\,mm MPJPE at unchanged PA-MPJPE. Letting the residual read raw per-view coordinates (hybrid and residual-only rows) gives the same in-cabin accuracy but is what makes zero-shot transfer collapse (Sec.~\ref{sec:driveandact}). Capacity does not help the token-based design: $d{=}64$ (105K) and $d{=}128$ (407K) raise MPJPE by 3\,mm and do not lower PA-MPJPE (41.8 and 40.5\,mm), so the regressors' PA advantage is structural; the v1 design at its original 870K parameters (136.4/40.9\,mm) is no better than at 261K. The common budget is not a handicap either (Table~\ref{tab:budget}): training four times longer raises the MPJPE of \method{} from 129.1 to 133.6\,mm at unchanged PA-MPJPE and leaves the residual-only model flat, and training windows from 16 to 256 frames, at a fixed number of frames per step, change MPJPE by at most 1.4\% for all three models; the Temporal-CNN is no worse with 16-frame windows, shorter than its receptive field, indicating that it acts as a per-frame whole-skeleton regressor on these data. Adjacent checkpoints of one fold differ by up to 3\%, so differences below about 1\,mm should not be interpreted. \method{} runs in $<$0.6\,ms per frame on one CPU thread and fits in $<$1\,MB; adapting to a new rig takes under ten minutes on one GPU.
+
+\section{Application: Head-Orientation Measurement}
+\label{sec:downstream}
+Pose accuracy matters for driver monitoring only if it yields valid behavioral signals. We test this for head yaw---the quantity behind mirror checks, glance behavior, and attention estimation---on all 88 in-cabin drives, with identical measurement code for every keypoint source. The aim is to validate the measurement, not to draw behavioral conclusions.
+
+\subsection{Measurement Protocol}
+Head yaw is the horizontal angle of the vector from the ear midpoint to the nose in the body frame of Sec.~\ref{sec:canon}, i.e., head rotation relative to the torso; it is smoothed over 0.3\,s and referenced to its median over the drive. A head turn is a $|\mathrm{yaw}|>15^\circ$ excursion lasting at least 0.2\,s. Two references are used. The \emph{independent signal} is the estimator's head rotation matrix, a separate output head that does not depend on nose or ear visibility, brought into the cabin frame with the self-calibrated extrinsics and averaged over the views. The \emph{human reference} is the left/right glance annotation of three raters, an event being kept when at least two agree (1{,}692 events; frame-wise Fleiss $\kappa=0.72$). The annotation tool counts frames at 24\,fps against 29.97\,fps video, so annotated frame indices are rescaled by 1.249 before any comparison; without this step the two time bases drift apart by 52--104\,s (median 69\,s) by the end of a drive. The keypoint streams cover on average the first 77\% of each annotated drive, and all statistics use the covered part.
+
+\subsection{Validity Against an Independent Head-Rotation Signal}
+\begin{table}[t]
+\centering
+\caption{Head-yaw validity on 88 drives. $r$: per-drive correlation with the independent head-rotation signal (mean / minimum); Fail: drives with $r<0.5$; Ampl.: keypoint yaw relative to the independent signal when it exceeds $20^\circ$ (1 = correct amplitude); Glance: agreement (\%) of yaw sign with annotated glance direction; head-turn rate.}
+\label{tab:downstream}
+\scriptsize
+\setlength{\tabcolsep}{2.0pt}
+\begin{tabular}{lcccccc}
+\toprule
+Keypoint source & $r$ mean & $r$ min & Fail & Ampl. & Glance & Turns/min \\
+\midrule
+\tabinput{tables/tab_downstream}
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/yaw_trace.pdf}
+\caption{Head yaw over 30\,s of one daytime drive (subject 9). The front camera alone (red) reaches a third of the main turn's amplitude and mean fusion (green) two thirds; \method{} (blue) tracks the independent head-rotation reference (dashed) in timing and amplitude. Window correlation with the reference: 0.42, 0.83, and 0.90.}
+\label{fig:yaw}
+\end{figure}
+
+Single cameras are unreliable sources of head orientation (Table~\ref{tab:downstream}): the front and right cameras fail on six and four drives ($r$ down to 0.20), the signature of steering-wheel and self-occlusion of the ears. Fusion removes these failures, and \method{} raises the worst-case correlation to 0.59. It does not improve the average correlation over mean fusion (0.84 vs.\ 0.85) and is slightly noisier at rest (3.0$^\circ$ vs.\ 2.2$^\circ$ standard deviation); its advantage is amplitude. For turns beyond $20^\circ$, \method{} recovers 0.97 of the independent signal, whereas averaging (0.78) and every single view (0.71--0.84) under-estimate turns by 16--29\%: per-view estimates are biased toward a frontal head under self-occlusion, averaging preserves the bias, and the residual removes it (Fig.~\ref{fig:yaw}). More turns therefore cross the threshold (2.65 vs.\ 2.10 per minute), which matters for any count-based attention measure.
+
+\subsection{Agreement with Human Annotations and Stability Across Illumination}
+The sign of keypoint yaw during annotated left/right glances agrees with the labelled direction for 96\% of the events with fused keypoints and 95\% with single views, and 93\% of the head turns detected from \method{} overlap an annotated glance. About half of the annotated glances come with a head turn of at least $15^\circ$; the rest are eye-dominant, so glance annotations and head turns are related but distinct measures. The measurement is stable across illumination: with \method{}, the head-turn rate is 2.79, 2.73, 2.48, and 2.61 per minute in the day-high, day-low, night-high, and night-low conditions (Friedman test over the 22 subjects, $p=0.82$), and neither the peak angle ($p=0.89$) nor the yaw spread ($p=0.26$) differs between conditions.
+
+\textbf{Scope.} We validate yaw only: head pitch correlates weakly with the reference pitch for every source (0.32--0.45; 0.40 for \method{}). The independent signal, being a separate output of the same estimator, is only partially independent. And the last quarter of each drive is not yet covered by keypoints.
 
 \section{Lessons for Learning Against Pseudo References}
 \label{sec:lessons}
