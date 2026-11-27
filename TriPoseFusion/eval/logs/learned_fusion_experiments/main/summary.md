@@ -1,43 +1,43 @@
 folds: [0, 1, 2, 3, 4]
 
-| method | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |
+| method | MPJPE (mm) | PA-MPJPE (mm) | PCK@100mm |
 |---|---|---|---|
-| single_front | 0.8807 ± 0.1636 | 0.3840 ± 0.1858 | 0.1176 ± 0.0326 |
-| single_left | 0.8556 ± 0.1726 | 0.3360 ± 0.1753 | 0.1120 ± 0.0408 |
-| single_right | 0.8680 ± 0.1681 | 0.3458 ± 0.1758 | 0.1080 ± 0.0428 |
-| fuse_mean | 0.8653 ± 0.1681 | 0.3554 ± 0.1813 | 0.1127 ± 0.0394 |
-| fuse_median | 0.8645 ± 0.1704 | 0.3560 ± 0.1828 | 0.1137 ± 0.0402 |
-| best_single_oracle | 0.8464 ± 0.1662 | 0.3488 ± 0.1838 | 0.1141 ± 0.0409 |
-| learned (fixed steps) | 0.7669 ± 0.2015 | 0.3173 ± 0.1689 | 0.1770 ± 0.0416 |
+| single_front | 880.7 ± 163.6 | 384.0 ± 185.8 | 0.1176 ± 0.0326 |
+| single_left | 855.6 ± 172.6 | 336.0 ± 175.3 | 0.1120 ± 0.0408 |
+| single_right | 868.0 ± 168.1 | 345.8 ± 175.8 | 0.1080 ± 0.0428 |
+| fuse_mean | 865.3 ± 168.1 | 355.4 ± 181.3 | 0.1127 ± 0.0394 |
+| fuse_median | 864.5 ± 170.4 | 356.0 ± 182.8 | 0.1137 ± 0.0402 |
+| best_single_oracle | 846.4 ± 166.2 | 348.8 ± 183.8 | 0.1141 ± 0.0409 |
+| learned (fixed steps) | 766.9 ± 201.5 | 317.3 ± 168.9 | 0.1770 ± 0.0416 |
 
 learned mean view weights (front/left/right): [0.405, 0.319, 0.276] ± [0.024, 0.04, 0.032]
 
 ### view corruption: drop (mean over 5 folds)
 
-| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |
+| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |
 |---|---|---|---|---|---|
-| clean | 0.7669 | 0.3173 | nan | 0.8653 | nan |
-| front | 0.7605 | 0.2838 | 0.000 | 0.8600 | 0.8600 |
-| left | 0.7755 | 0.3172 | 0.000 | 0.8722 | 0.8722 |
-| right | 0.7659 | 0.3123 | 0.000 | 0.8658 | 0.8658 |
+| clean | 766.9 | 317.3 | nan | 865.3 | nan |
+| front | 760.5 | 283.8 | 0.000 | 860.0 | 860.0 |
+| left | 775.5 | 317.2 | 0.000 | 872.2 | 872.2 |
+| right | 765.9 | 312.3 | 0.000 | 865.8 | 865.8 |
 
 ### view corruption: zero (mean over 5 folds)
 
-| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |
+| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |
 |---|---|---|---|---|---|
-| clean | 0.7669 | 0.3173 | nan | 0.8653 | nan |
-| front | 0.9152 | 0.4877 | 0.547 | 0.9284 | 0.8600 |
-| left | 0.9235 | 0.4950 | 0.502 | 0.9356 | 0.8722 |
-| right | 0.9167 | 0.4927 | 0.491 | 0.9315 | 0.8658 |
+| clean | 766.9 | 317.3 | nan | 865.3 | nan |
+| front | 915.2 | 487.7 | 0.547 | 928.4 | 860.0 |
+| left | 923.5 | 495.0 | 0.502 | 935.6 | 872.2 |
+| right | 916.7 | 492.7 | 0.491 | 931.5 | 865.8 |
 
 ### view corruption: noise (mean over 5 folds)
 
-| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |
+| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |
 |---|---|---|---|---|---|
-| clean | 0.7669 | 0.3173 | nan | 0.8653 | nan |
-| front | 0.8197 | 0.3957 | 0.629 | 0.8715 | 0.8600 |
-| left | 0.8119 | 0.3880 | 0.581 | 0.8715 | 0.8722 |
-| right | 0.8159 | 0.3899 | 0.544 | 0.8715 | 0.8658 |
+| clean | 766.9 | 317.3 | nan | 865.3 | nan |
+| front | 819.7 | 395.7 | 0.629 | 871.5 | 860.0 |
+| left | 811.9 | 388.0 | 0.581 | 871.5 | 872.2 |
+| right | 815.9 | 389.9 | 0.544 | 871.5 | 865.8 |
 
 ### Drive&Act zero-shot (hs10, pooled PA-MPJPE mm)
 

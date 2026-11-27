@@ -4,6 +4,8 @@
 Every configuration ``<prefix>_<name>`` is expected to hold ``fold{0..4}/result.json`` and,
 optionally, ``stress_zero.json``, ``stress_noise.json`` and ``driveandact.json``.  All
 numbers are means over the folds present; a row with fewer than five folds is marked.
+Every error is reported in millimetres (the JSON fields are ``*_m``, metres); PCK is the
+fraction of joints within 100 mm.
 
     python TriPoseFusion/eval/eqb_table.py                     # prefix eqb
     python TriPoseFusion/eval/eqb_table.py --prefix eqbw16 --out table.md
@@ -18,6 +20,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent / "logs" / "learned_fusion_experiments"
 VIEWS = ("front", "left", "right")
+MM = 1000.0  # result JSON stores errors in metres (`*_m`); every table reports millimetres
 # name -> label, ordered as in the paper table
 ROWS = {
     "tf_geomedian": "Geometric median (Weiszfeld)",
@@ -60,7 +63,7 @@ def mean(xs):
 
 
 def stress_stats(folds, name):
-    """Mean learned MPJPE / weight on the corrupted view, over folds and the three views."""
+    """Mean learned MPJPE (mm) / weight on the corrupted view, over folds and the three views."""
     err, wt, ref, oracle = [], [], [], []
     for fd in folds:
         d = load(fd / name)
@@ -70,7 +73,7 @@ def stress_stats(folds, name):
         wt.append(mean(d[v]["weight_on_corrupted_view"] for v in VIEWS))
         ref.append(mean(d[v]["fuse_mean_same_corruption"]["mpjpe_m"] for v in VIEWS))
         oracle.append(mean(d[v]["fuse_mean_excluding_view_oracle"]["mpjpe_m"] for v in VIEWS))
-    return mean(err), mean(wt), mean(ref), mean(oracle), len(err)
+    return MM * mean(err), mean(wt), MM * mean(ref), MM * mean(oracle), len(err)
 
 
 def collect(prefix: str, root: Path):
@@ -87,13 +90,13 @@ def collect(prefix: str, root: Path):
         zero, noise = stress_stats(folds, "stress_zero.json"), stress_stats(folds, "stress_noise.json")
         rows.append({
             "name": name, "label": label, "folds": len(res), "params": res[0]["params"],
-            "mpjpe": mean(r["learned_last"]["mpjpe_m"] for r in res),
-            "pa": mean(r["learned_last"]["pa_mpjpe_m"] for r in res),
+            "mpjpe": MM * mean(r["learned_last"]["mpjpe_m"] for r in res),
+            "pa": MM * mean(r["learned_last"]["pa_mpjpe_m"] for r in res),
             "pck10": mean(r["learned_last"]["pck"]["0.10"] for r in res),
-            "per_fold": [r["learned_last"]["mpjpe_m"] for r in res],
+            "per_fold": [MM * r["learned_last"]["mpjpe_m"] for r in res],
             "zero": zero, "noise": noise,
-            "da": 1000 * mean(d["learned"]["pa_mpjpe_m"] for d in da) if da else float("nan"),
-            "da_mean": 1000 * mean(d["fuse_mean"]["pa_mpjpe_m"] for d in da) if da else float("nan"),
+            "da": MM * mean(d["learned"]["pa_mpjpe_m"] for d in da) if da else float("nan"),
+            "da_mean": MM * mean(d["fuse_mean"]["pa_mpjpe_m"] for d in da) if da else float("nan"),
             "n_da": len(da),
             "train_s": mean(r["train_seconds"] for r in res),
         })
@@ -104,8 +107,8 @@ def render(prefix: str, root: Path) -> str:
     rows, ref = collect(prefix, root)
     if not rows:
         return f"no results for prefix {prefix!r} under {root}\n"
-    base = {k: (mean(r["training_free"][k]["mpjpe_m"] for r in ref),
-                mean(r["training_free"][k]["pa_mpjpe_m"] for r in ref),
+    base = {k: (MM * mean(r["training_free"][k]["mpjpe_m"] for r in ref),
+                MM * mean(r["training_free"][k]["pa_mpjpe_m"] for r in ref),
                 mean(r["training_free"][k]["pck"]["0.10"] for r in ref)) for k in FREE}
     m0, p0, _ = base["fuse_mean"]
     zero_ref = next((r["zero"] for r in rows if r["zero"][4]), None)
@@ -121,37 +124,37 @@ def render(prefix: str, root: Path) -> str:
             return ""
         return f" ({n}f)"
 
-    out = [f"### Equal-budget table (`{prefix}_*`, mean over folds; errors in metres, Drive&Act in mm)", "",
-           "| Method | Params | MPJPE | PA-MPJPE | dMPJPE | dPA | PCK@0.10 | zero-view MPJPE | w(bad) | "
+    out = [f"### Equal-budget table (`{prefix}_*`, mean over folds; all errors in mm)", "",
+           "| Method | Params | MPJPE | PA-MPJPE | dMPJPE | dPA | PCK@100mm | zero-view MPJPE | w(bad) | "
            "noise-view MPJPE | w(bad) | D&A zero-shot PA |",
            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for key, label in FREE.items():
         m, p, k = base[key]
         extra = ["", "", "", "", ""]
         if key == "fuse_mean":
-            extra = [f"{zero_ref[2]:.4f}" if zero_ref else "", "0.333",
-                     f"{noise_ref[2]:.4f}" if noise_ref else "", "0.333", f"{da_mean:.1f}"]
-        out.append(f"| {label} | 0 | {m:.4f} | {p:.4f} | {pct(m, m0)} | {pct(p, p0)} | {k:.3f} | "
+            extra = [f"{zero_ref[2]:.1f}" if zero_ref else "", "0.333",
+                     f"{noise_ref[2]:.1f}" if noise_ref else "", "0.333", f"{da_mean:.1f}"]
+        out.append(f"| {label} | 0 | {m:.1f} | {p:.1f} | {pct(m, m0)} | {pct(p, p0)} | {k:.3f} | "
                    + " | ".join(extra) + " |")
     if zero_ref:
-        out.append(f"| Mean of the two clean views (oracle) | 0 | | | | | | {zero_ref[3]:.4f} | 0 | "
-                   f"{noise_ref[3]:.4f} | 0 | |" if noise_ref else
-                   f"| Mean of the two clean views (oracle) | 0 | | | | | | {zero_ref[3]:.4f} | 0 | | | |")
+        out.append(f"| Mean of the two clean views (oracle) | 0 | | | | | | {zero_ref[3]:.1f} | 0 | "
+                   f"{noise_ref[3]:.1f} | 0 | |" if noise_ref else
+                   f"| Mean of the two clean views (oracle) | 0 | | | | | | {zero_ref[3]:.1f} | 0 | | | |")
     for r in rows:
         flag = "" if r["folds"] == 5 else f" ({r['folds']} folds)"
         z, n = r["zero"], r["noise"]
         out.append(
-            f"| {r['label']}{flag} | {r['params']:,} | {r['mpjpe']:.4f} | {r['pa']:.4f} | {pct(r['mpjpe'], m0)} | "
+            f"| {r['label']}{flag} | {r['params']:,} | {r['mpjpe']:.1f} | {r['pa']:.1f} | {pct(r['mpjpe'], m0)} | "
             f"{pct(r['pa'], p0)} | {r['pck10']:.3f} | "
-            + (f"{z[0]:.4f}{part(z[4], r)} | {z[1]:.3f}" if z[4] else " | ") + " | "
-            + (f"{n[0]:.4f}{part(n[4], r)} | {n[1]:.3f}" if n[4] else " | ") + " | "
+            + (f"{z[0]:.1f}{part(z[4], r)} | {z[1]:.3f}" if z[4] else " | ") + " | "
+            + (f"{n[0]:.1f}{part(n[4], r)} | {n[1]:.3f}" if n[4] else " | ") + " | "
             + (f"{r['da']:.1f}{part(r['n_da'], r, free_ok=True)}" if r["n_da"] else "") + " |")
-    out += ["", "Per-fold MPJPE (folds 0-4):", ""]
+    out += ["", "Per-fold MPJPE (mm, folds 0-4):", ""]
     out.append("| Method | " + " | ".join(f"fold {k}" for k in range(5)) + " |")
     out.append("|---|" + "---:|" * 5)
-    out.append("| Mean fusion | " + " | ".join(f"{r['training_free']['fuse_mean']['mpjpe_m']:.4f}" for r in ref) + " |")
+    out.append("| Mean fusion | " + " | ".join(f"{MM * r['training_free']['fuse_mean']['mpjpe_m']:.1f}" for r in ref) + " |")
     for r in rows:
-        out.append(f"| {r['label']} | " + " | ".join(f"{x:.4f}" for x in r["per_fold"]) + " |")
+        out.append(f"| {r['label']} | " + " | ".join(f"{x:.1f}" for x in r["per_fold"]) + " |")
     return "\n".join(out) + "\n"
 
 

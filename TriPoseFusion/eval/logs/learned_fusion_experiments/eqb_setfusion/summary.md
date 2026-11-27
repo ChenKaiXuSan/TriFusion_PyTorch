@@ -1,46 +1,46 @@
 folds: [0, 1, 2, 3, 4]
 
-| method | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |
+| method | MPJPE (mm) | PA-MPJPE (mm) | PCK@100mm |
 |---|---|---|---|
-| single_front | 0.1723 ± 0.0249 | 0.0588 ± 0.0106 | 0.4586 ± 0.0620 |
-| single_left | 0.1606 ± 0.0288 | 0.0457 ± 0.0106 | 0.4730 ± 0.0603 |
-| single_right | 0.1524 ± 0.0253 | 0.0454 ± 0.0102 | 0.4774 ± 0.0600 |
-| fuse_mean | 0.1486 ± 0.0256 | 0.0440 ± 0.0092 | 0.4972 ± 0.0546 |
-| fuse_median | 0.1515 ± 0.0241 | 0.0458 ± 0.0101 | 0.4848 ± 0.0579 |
-| best_single_oracle | 0.1447 ± 0.0216 | 0.0462 ± 0.0117 | 0.4884 ± 0.0607 |
-| learned (fixed steps) | 0.1291 ± 0.0298 | 0.0405 ± 0.0100 | 0.5451 ± 0.0817 |
+| single_front | 172.3 ± 24.9 | 58.8 ± 10.6 | 0.4586 ± 0.0620 |
+| single_left | 160.6 ± 28.8 | 45.7 ± 10.6 | 0.4730 ± 0.0603 |
+| single_right | 152.4 ± 25.3 | 45.4 ± 10.2 | 0.4774 ± 0.0600 |
+| fuse_mean | 148.6 ± 25.6 | 44.0 ± 9.2 | 0.4972 ± 0.0546 |
+| fuse_median | 151.5 ± 24.1 | 45.8 ± 10.1 | 0.4848 ± 0.0579 |
+| best_single_oracle | 144.7 ± 21.6 | 46.2 ± 11.7 | 0.4884 ± 0.0607 |
+| learned (fixed steps) | 129.1 ± 29.8 | 40.5 ± 10.0 | 0.5451 ± 0.0817 |
 
-| method | head | shoulders/neck | body | hands |
+| method (group MPJPE, mm) | head | shoulders/neck | body | hands |
 |---|---|---|---|---|
-| single_front | 0.0860 | 0.0232 | 0.0546 | 0.2786 |
-| single_left | 0.0833 | 0.0230 | 0.0532 | 0.2556 |
-| single_right | 0.0800 | 0.0224 | 0.0512 | 0.2432 |
-| fuse_mean | 0.0812 | 0.0220 | 0.0516 | 0.2335 |
-| fuse_median | 0.0812 | 0.0220 | 0.0516 | 0.2396 |
-| best_single_oracle | 0.0802 | 0.0226 | 0.0514 | 0.2337 |
-| learned (fixed steps) | 0.0732 | 0.0225 | 0.0478 | 0.2016 |
+| single_front | 86.0 | 23.2 | 54.6 | 278.6 |
+| single_left | 83.3 | 23.0 | 53.2 | 255.6 |
+| single_right | 80.0 | 22.4 | 51.2 | 243.2 |
+| fuse_mean | 81.2 | 22.0 | 51.6 | 233.5 |
+| fuse_median | 81.2 | 22.0 | 51.6 | 239.6 |
+| best_single_oracle | 80.2 | 22.6 | 51.4 | 233.7 |
+| learned (fixed steps) | 73.2 | 22.5 | 47.8 | 201.6 |
 
-uncertainty calibration (mean over folds): spearman(scale, error)=0.696, error most-confident decile 0.0132 vs least-confident 0.2344 (all 0.1459)
+uncertainty calibration (mean over folds): spearman(scale, error)=0.696, error most-confident decile 13.2 mm vs least-confident 234.4 mm (all 145.9 mm)
 
 learned mean view weights (front/left/right): [0.188, 0.322, 0.49] ± [0.019, 0.037, 0.047]
 
 ### view corruption: zero (mean over 5 folds)
 
-| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |
+| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |
 |---|---|---|---|---|---|
-| clean | 0.1291 | 0.0405 | nan | 0.1486 | nan |
-| front | 0.1306 | 0.0421 | 0.009 | 0.1751 | 0.1479 |
-| left | 0.1325 | 0.0463 | 0.025 | 0.1769 | 0.1531 |
-| right | 0.1359 | 0.0451 | 0.019 | 0.1770 | 0.1551 |
+| clean | 129.1 | 40.5 | nan | 148.6 | nan |
+| front | 130.6 | 42.1 | 0.009 | 175.1 | 147.9 |
+| left | 132.5 | 46.3 | 0.025 | 176.9 | 153.1 |
+| right | 135.9 | 45.1 | 0.019 | 177.0 | 155.1 |
 
 ### view corruption: noise (mean over 5 folds)
 
-| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |
+| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |
 |---|---|---|---|---|---|
-| clean | 0.1291 | 0.0405 | nan | 0.1486 | nan |
-| front | 0.1309 | 0.0448 | 0.138 | 0.1668 | 0.1479 |
-| left | 0.1326 | 0.0523 | 0.221 | 0.1668 | 0.1531 |
-| right | 0.1360 | 0.0586 | 0.328 | 0.1668 | 0.1551 |
+| clean | 129.1 | 40.5 | nan | 148.6 | nan |
+| front | 130.9 | 44.8 | 0.138 | 166.8 | 147.9 |
+| left | 132.6 | 52.3 | 0.221 | 166.8 | 153.1 |
+| right | 136.0 | 58.6 | 0.328 | 166.8 | 155.1 |
 
 ### Drive&Act zero-shot (hs10, pooled PA-MPJPE mm)
 

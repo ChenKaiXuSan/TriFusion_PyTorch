@@ -7,7 +7,8 @@
 | 内容 | 位置 |
 |---|---|
 | T-ITS 稿（IEEEtran，9 页） | `paper_tits/main.tex`、`main.pdf`、`figures/` |
-| 结果总表（三阶段对照、统一 Table 3、16 组学习型融合、Drive&Act 四项） | `TriPoseFusion/docs/results_summary_2026-08-30.md` |
+| **现行结果总表（2026-11-27，全部 mm）**：统一训练量主表 + baseline、训练量/窗口对照、Drive&Act 统一协议、下游头部朝向 | `TriPoseFusion/docs/results_summary_2026-11-27.md` |
+| 历史结果总表（2026-08-30，单位 m）：三阶段对照、统一 Table 3、Drive&Act 免训练/三角化基线 | `TriPoseFusion/docs/results_summary_2026-08-30.md` |
 | v3 决策与实验记录（结构、实验 1–4、下游节） | `TriPoseFusion/docs/v3_decision_log_2026-08-30.md` |
 | 修复/发现全记录（§一～二·七 ACCV 期，§二·八 起 v3） | `TriPoseFusion/docs/review_fix_plan.md` |
 | ACCV 归档 | `archive/accv2026/`（README 内有说明）+ Overleaf `code/TriFusion_accv/` |

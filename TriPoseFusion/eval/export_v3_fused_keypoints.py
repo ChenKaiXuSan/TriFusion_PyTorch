@@ -113,7 +113,7 @@ def main() -> None:
                 "cameras": np.load(p, allow_pickle=True)["cameras"]}
             payload.update(fused_v3=pred, uncertainty_v3=unc, gate_v3=gate, fold_v3=np.int64(fold))
             np.savez_compressed(out_path, **payload)
-            print(f"  {p.stem}: T={pred.shape[0]} mpjpe={row['mpjpe_m']:.4f} (ref {r.get('mpjpe_m', float('nan')):.4f})", flush=True)
+            print(f"  {p.stem}: T={pred.shape[0]} mpjpe={1000*row['mpjpe_m']:.1f} mm (ref {1000*r.get('mpjpe_m', float('nan')):.1f} mm)", flush=True)
     json.dump(manifest, open(args.out_dir / "v3_export_manifest.json", "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)
     mp = np.array([r["mpjpe_m"] for r in manifest if r["mpjpe_m"] is not None])

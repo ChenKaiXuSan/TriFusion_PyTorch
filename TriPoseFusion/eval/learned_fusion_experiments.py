@@ -46,6 +46,7 @@ from fusion_baselines import BASELINES  # noqa: E402
 
 VIEWS = ("front", "left", "right")
 DEVICE = torch.device("cpu")  # set from --device in main()
+MM = 1000.0  # errors are stored in metres (`*_m` JSON fields) and always reported in millimetres
 
 
 class _Seq(dict):
@@ -556,7 +557,7 @@ def cmd_train(args) -> None:
                 rows, wmean = learned_rows(model, val_store, args.pck)
                 agg = summarize(rows)
                 history.append({"step": step, "loss": float(loss.item()), "mpjpe_m": agg["mpjpe_m"], "pa_mpjpe_m": agg["pa_mpjpe_m"]})
-                print(f"[fold {fold}] step {step} loss {loss.item():.4f} val MPJPE {agg['mpjpe_m']:.4f} PA {agg['pa_mpjpe_m']:.4f} ({time.time()-t0:.0f}s)", flush=True)
+                print(f"[fold {fold}] step {step} loss {loss.item():.4f} val MPJPE {MM*agg['mpjpe_m']:.1f} PA {MM*agg['pa_mpjpe_m']:.1f} mm ({time.time()-t0:.0f}s)", flush=True)
                 if best is None or agg["mpjpe_m"] < best["mpjpe_m"]:
                     best = {"step": step, **agg}
         # fixed-step model (no selection on the evaluation fold)
@@ -580,7 +581,7 @@ def cmd_train(args) -> None:
             "per_sequence_learned": rows,
         }
         (out / "result.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False))
-        print(f"[fold {fold}] learned(last) {agg['mpjpe_m']:.4f}/{agg['pa_mpjpe_m']:.4f} | mean {anchors['fuse_mean']['mpjpe_m']:.4f}/{anchors['fuse_mean']['pa_mpjpe_m']:.4f} | best single {anchors['best_single_oracle']['mpjpe_m']:.4f} | weights {np.round(wmean, 3).tolist()}", flush=True)
+        print(f"[fold {fold}] learned(last) {MM*agg['mpjpe_m']:.1f}/{MM*agg['pa_mpjpe_m']:.1f} mm | mean {MM*anchors['fuse_mean']['mpjpe_m']:.1f}/{MM*anchors['fuse_mean']['pa_mpjpe_m']:.1f} | best single {MM*anchors['best_single_oracle']['mpjpe_m']:.1f} | weights {np.round(wmean, 3).tolist()}", flush=True)
 
 
 # ------------------------------------------------------------------ stress
@@ -625,7 +626,7 @@ def cmd_stress(args) -> None:
                 "fuse_mean_same_corruption": summarize(mean_rows),
                 "fuse_mean_excluding_view_oracle": excl,
             }
-            print(f"[fold {fold}] {args.mode:5s} {name:6s} learned {learned['mpjpe_m']:.4f}/{learned['pa_mpjpe_m']:.4f} w={np.round(wmean,3).tolist()} | mean {res[name]['fuse_mean_same_corruption']['mpjpe_m']:.4f}", flush=True)
+            print(f"[fold {fold}] {args.mode:5s} {name:6s} learned {MM*learned['mpjpe_m']:.1f}/{MM*learned['pa_mpjpe_m']:.1f} mm w={np.round(wmean,3).tolist()} | mean {MM*res[name]['fuse_mean_same_corruption']['mpjpe_m']:.1f}", flush=True)
         (fold_dir(args, fold) / f"stress_{args.mode}.json").write_text(json.dumps(res, indent=1, ensure_ascii=False))
 
 
@@ -733,8 +734,8 @@ def cmd_crosseval(args) -> None:
         }
         (fold_dir(args, fold) / f"crosseval_{args.target_name}.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False))
         lm, fm = payload["learned_mean"], payload["fuse_mean_mean"]
-        print(f"[fold {fold}] zero-shot on {args.target_name}: learned {lm['mpjpe_m']:.4f}/{lm['pa_mpjpe_m']:.4f} | "
-              f"mean {fm['mpjpe_m']:.4f}/{fm['pa_mpjpe_m']:.4f}", flush=True)
+        print(f"[fold {fold}] zero-shot on {args.target_name}: learned {MM*lm['mpjpe_m']:.1f}/{MM*lm['pa_mpjpe_m']:.1f} mm | "
+              f"mean {MM*fm['mpjpe_m']:.1f}/{MM*fm['pa_mpjpe_m']:.1f}", flush=True)
 
 
 # ------------------------------------------------------------------ summarize
@@ -768,17 +769,18 @@ def cmd_summarize(args) -> None:
                     g[k].append(agg["groups"].get(k, float("nan")))
         if r.get("uncertainty_calibration"):
             calib.append(r["uncertainty_calibration"])
-    lines = [f"folds: {folds}", "", "| method | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |", "|---|---|---|---|"]
+    lines = [f"folds: {folds}", "", "| method | MPJPE (mm) | PA-MPJPE (mm) | PCK@100mm |", "|---|---|---|---|"]
     for name, t in table.items():
-        f = lambda v: f"{np.mean(v):.4f} ± {np.std(v):.4f}"
-        lines.append(f"| {name} | {f(t['mpjpe'])} | {f(t['pa'])} | {f(t['pck10'])} |")
+        f = lambda v: f"{MM * np.mean(v):.1f} ± {MM * np.std(v):.1f}"   # errors, mm
+        fp = lambda v: f"{np.mean(v):.4f} ± {np.std(v):.4f}"            # PCK, fraction
+        lines.append(f"| {name} | {f(t['mpjpe'])} | {f(t['pa'])} | {fp(t['pck10'])} |")
     if groups:
-        lines += ["", "| method | head | shoulders/neck | body | hands |", "|---|---|---|---|---|"]
+        lines += ["", "| method (group MPJPE, mm) | head | shoulders/neck | body | hands |", "|---|---|---|---|---|"]
         for name, g in groups.items():
-            lines.append(f"| {name} | " + " | ".join(f"{np.nanmean(g[k]):.4f}" for k in JOINT_GROUPS) + " |")
+            lines.append(f"| {name} | " + " | ".join(f"{MM * np.nanmean(g[k]):.1f}" for k in JOINT_GROUPS) + " |")
     if calib:
         lines += ["", f"uncertainty calibration (mean over folds): spearman(scale, error)={np.mean([c['spearman_scale_vs_error'] for c in calib]):.3f}, "
-                  f"error most-confident decile {np.mean([c['err_most_confident_decile'] for c in calib]):.4f} vs least-confident {np.mean([c['err_least_confident_decile'] for c in calib]):.4f} (all {np.mean([c['err_all'] for c in calib]):.4f})"]
+                  f"error most-confident decile {MM*np.mean([c['err_most_confident_decile'] for c in calib]):.1f} mm vs least-confident {MM*np.mean([c['err_least_confident_decile'] for c in calib]):.1f} mm (all {MM*np.mean([c['err_all'] for c in calib]):.1f} mm)"]
     w = np.array(weights)
     lines.append("")
     lines.append(f"learned mean view weights (front/left/right): {np.round(w.mean(0), 3).tolist()} ± {np.round(w.std(0), 3).tolist()}")
@@ -787,14 +789,14 @@ def cmd_summarize(args) -> None:
         files = [p for p in files if p.exists()]
         if not files:
             continue
-        lines += ["", f"### view corruption: {mode} (mean over {len(files)} folds)", "", "| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |", "|---|---|---|---|---|---|"]
+        lines += ["", f"### view corruption: {mode} (mean over {len(files)} folds)", "", "| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |", "|---|---|---|---|---|---|"]
         for cond in ("clean", *VIEWS):
             vals = [json.loads(p.read_text())[cond] for p in files]
             g = lambda key: np.mean([v["learned"][key] for v in vals])
             wv = [v["weight_on_corrupted_view"] for v in vals if v["weight_on_corrupted_view"] is not None]
             mm = np.mean([v["fuse_mean_same_corruption"]["mpjpe_m"] for v in vals])
             ex = [v["fuse_mean_excluding_view_oracle"]["mpjpe_m"] for v in vals if v["fuse_mean_excluding_view_oracle"]]
-            lines.append(f"| {cond} | {g('mpjpe_m'):.4f} | {g('pa_mpjpe_m'):.4f} | {(np.mean(wv) if wv else float('nan')):.3f} | {mm:.4f} | {(np.mean(ex) if ex else float('nan')):.4f} |")
+            lines.append(f"| {cond} | {MM*g('mpjpe_m'):.1f} | {MM*g('pa_mpjpe_m'):.1f} | {(np.mean(wv) if wv else float('nan')):.3f} | {MM*mm:.1f} | {(MM*np.mean(ex) if ex else float('nan')):.1f} |")
     da = [base / f"fold{f}" / "driveandact.json" for f in folds]
     da = [p for p in da if p.exists()]
     if da:

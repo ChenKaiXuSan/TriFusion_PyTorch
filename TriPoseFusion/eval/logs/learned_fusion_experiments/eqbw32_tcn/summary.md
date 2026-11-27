@@ -1,23 +1,23 @@
 folds: [0, 1, 2, 3, 4]
 
-| method | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |
+| method | MPJPE (mm) | PA-MPJPE (mm) | PCK@100mm |
 |---|---|---|---|
-| single_front | 0.1723 ± 0.0249 | 0.0588 ± 0.0106 | 0.4586 ± 0.0620 |
-| single_left | 0.1606 ± 0.0288 | 0.0457 ± 0.0106 | 0.4730 ± 0.0603 |
-| single_right | 0.1524 ± 0.0253 | 0.0454 ± 0.0102 | 0.4774 ± 0.0600 |
-| fuse_mean | 0.1486 ± 0.0256 | 0.0440 ± 0.0092 | 0.4972 ± 0.0546 |
-| fuse_median | 0.1515 ± 0.0241 | 0.0458 ± 0.0101 | 0.4848 ± 0.0579 |
-| best_single_oracle | 0.1447 ± 0.0216 | 0.0462 ± 0.0117 | 0.4884 ± 0.0607 |
-| learned (fixed steps) | 0.1300 ± 0.0289 | 0.0373 ± 0.0093 | 0.5358 ± 0.0735 |
+| single_front | 172.3 ± 24.9 | 58.8 ± 10.6 | 0.4586 ± 0.0620 |
+| single_left | 160.6 ± 28.8 | 45.7 ± 10.6 | 0.4730 ± 0.0603 |
+| single_right | 152.4 ± 25.3 | 45.4 ± 10.2 | 0.4774 ± 0.0600 |
+| fuse_mean | 148.6 ± 25.6 | 44.0 ± 9.2 | 0.4972 ± 0.0546 |
+| fuse_median | 151.5 ± 24.1 | 45.8 ± 10.1 | 0.4848 ± 0.0579 |
+| best_single_oracle | 144.7 ± 21.6 | 46.2 ± 11.7 | 0.4884 ± 0.0607 |
+| learned (fixed steps) | 130.0 ± 28.9 | 37.3 ± 9.3 | 0.5358 ± 0.0735 |
 
-| method | head | shoulders/neck | body | hands |
+| method (group MPJPE, mm) | head | shoulders/neck | body | hands |
 |---|---|---|---|---|
-| single_front | 0.0860 | 0.0232 | 0.0546 | 0.2786 |
-| single_left | 0.0833 | 0.0230 | 0.0532 | 0.2556 |
-| single_right | 0.0800 | 0.0224 | 0.0512 | 0.2432 |
-| fuse_mean | 0.0812 | 0.0220 | 0.0516 | 0.2335 |
-| fuse_median | 0.0812 | 0.0220 | 0.0516 | 0.2396 |
-| best_single_oracle | 0.0802 | 0.0226 | 0.0514 | 0.2337 |
-| learned (fixed steps) | 0.0754 | 0.0228 | 0.0491 | 0.2013 |
+| single_front | 86.0 | 23.2 | 54.6 | 278.6 |
+| single_left | 83.3 | 23.0 | 53.2 | 255.6 |
+| single_right | 80.0 | 22.4 | 51.2 | 243.2 |
+| fuse_mean | 81.2 | 22.0 | 51.6 | 233.5 |
+| fuse_median | 81.2 | 22.0 | 51.6 | 239.6 |
+| best_single_oracle | 80.2 | 22.6 | 51.4 | 233.7 |
+| learned (fixed steps) | 75.4 | 22.8 | 49.1 | 201.3 |
 
 learned mean view weights (front/left/right): [0.334, 0.334, 0.334] ± [0.0, 0.0, 0.0]

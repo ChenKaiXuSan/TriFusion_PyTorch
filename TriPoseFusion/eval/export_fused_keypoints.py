@@ -141,12 +141,12 @@ def main() -> None:
             tmp_path = out_path.with_name(out_path.stem + ".tmp.npz")
             np.savez_compressed(tmp_path, **payload)
             os.replace(tmp_path, out_path)  # atomic: an interrupted run leaves the old file intact
-            print(f"  {p.stem}: T={pred.shape[0]} mpjpe={row['mpjpe_m']:.4f} "
-                  f"(train-log ref {r.get('mpjpe_m', float('nan')):.4f})", flush=True)
+            print(f"  {p.stem}: T={pred.shape[0]} mpjpe={1000*row['mpjpe_m']:.1f} mm "
+                  f"(train-log ref {1000*r.get('mpjpe_m', float('nan')):.1f} mm)", flush=True)
     json.dump(manifest, open(args.out_dir / f"{sfx}_export_manifest.json", "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)
     mp = np.array([r["mpjpe_m"] for r in manifest if r["mpjpe_m"] is not None])
-    print(f"done: {len(manifest)} sequences, mean per-sequence MPJPE {mp.mean():.4f} m", flush=True)
+    print(f"done: {len(manifest)} sequences, mean per-sequence MPJPE {1000*mp.mean():.1f} mm", flush=True)
 
 
 if __name__ == "__main__":

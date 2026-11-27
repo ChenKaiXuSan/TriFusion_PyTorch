@@ -293,7 +293,7 @@ def main() -> None:
             history.append({"step": step, "loss": float(loss.item()), **agg})
             print(
                 f"step {step} loss {loss.item():.4f} "
-                f"val MPJPE {agg['mpjpe_m']:.4f} PA {agg['pa_mpjpe_m']:.4f} "
+                f"val MPJPE {1000*agg['mpjpe_m']:.1f} PA {1000*agg['pa_mpjpe_m']:.1f} mm "
                 f"({time.time()-t0:.0f}s)",
                 flush=True,
             )

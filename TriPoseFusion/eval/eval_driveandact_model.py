@@ -200,8 +200,8 @@ def main() -> None:
         pooled_gt.append(gt_arr)
         pooled_valid.append(valid_arr)
         results[f"{vp}/{run}"] = run_res
-        print(f"{vp}/{run}: {len(windows)} windows, model PA={run_res['model']['pa_mpjpe_m']:.4f} "
-              f"fuse_mean PA={run_res['fuse_mean']['pa_mpjpe_m']:.4f}", flush=True)
+        print(f"{vp}/{run}: {len(windows)} windows, model PA={1000*run_res['model']['pa_mpjpe_m']:.1f} mm "
+              f"fuse_mean PA={1000*run_res['fuse_mean']['pa_mpjpe_m']:.1f} mm", flush=True)
 
     if pooled_gt:
         gt_all, valid_all = np.concatenate(pooled_gt), np.concatenate(pooled_valid)
