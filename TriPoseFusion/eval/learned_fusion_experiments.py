@@ -110,6 +110,8 @@ class SeqStore(_BaseSeqStore):
 DEFAULT_CACHE = Path("/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache_perseq")  # v3 参考；v1 缓存已移至 _legacy/
 DEFAULT_INDEX = Path("/work/1/SKIING/chenkaixu/data/drive/index_mapping")
 DEFAULT_DA_ROOT = Path("/work/1/SKIING/chenkaixu/data/drive/driveandact/tripose_eval_dense")
+DEFAULT_DA_CACHE = Path("/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache_driveandact")  # crosseval target
+DEFAULT_DA_INDEX = Path("/work/1/SKIING/chenkaixu/data/drive/driveandact_index_mapping")
 DEFAULT_OUT = SCRIPT_DIR / "logs" / "learned_fusion_experiments"
 
 
@@ -697,6 +699,44 @@ def cmd_driveandact(args) -> None:
     print("learned mean view weights:", overall["learned"]["mean_view_weights"])
 
 
+# ------------------------------------------------------------------ cross-dataset zero-shot
+
+
+def cmd_crosseval(args) -> None:
+    """Zero-shot transfer under the validation protocol of `train`.
+
+    Every fold model of --tag (trained on --cache-dir) is evaluated, without any update, on
+    the validation sequences of each fold of another dataset (--target-cache-dir /
+    --target-index-mapping): whole sequences, same compute_metrics, mean over the target
+    folds.  The numbers are therefore directly comparable with `learned_last` of a model
+    trained on the target dataset with the same fold files (unlike `driveandact`, which
+    scores 16-frame windows of the dense clips with hs10 PA only).
+    """
+    n_target = len(sorted(Path(args.target_index_mapping).glob("fold_*.json")))
+    stores = [SeqStore(args.target_cache_dir, load_fold_pairs(args.target_index_mapping, tf)[1]) for tf in range(n_target)]
+    anchors = [training_free_rows(st, args.pck)["fuse_mean"] for st in stores]
+    keys = ("mpjpe_m", "pa_mpjpe_m")
+    for fold in args.folds:
+        model = load_fold_model(args, fold)
+        per = []
+        for tf, st in enumerate(stores):
+            rows, wmean = learned_rows(model, st, args.pck)
+            agg = summarize(rows)
+            agg["groups"] = group_mpjpe(rows)
+            per.append({"target_fold": tf, "learned": agg, "fuse_mean": anchors[tf],
+                        "mean_view_weights": dict(zip(VIEWS, wmean.tolist())), "per_sequence_learned": rows})
+        payload = {
+            "source_fold": fold, "target": args.target_name, "target_cache_dir": str(args.target_cache_dir),
+            "learned_mean": {k: float(np.mean([p["learned"][k] for p in per])) for k in keys},
+            "fuse_mean_mean": {k: float(np.mean([p["fuse_mean"][k] for p in per])) for k in keys},
+            "target_folds": per,
+        }
+        (fold_dir(args, fold) / f"crosseval_{args.target_name}.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False))
+        lm, fm = payload["learned_mean"], payload["fuse_mean_mean"]
+        print(f"[fold {fold}] zero-shot on {args.target_name}: learned {lm['mpjpe_m']:.4f}/{lm['pa_mpjpe_m']:.4f} | "
+              f"mean {fm['mpjpe_m']:.4f}/{fm['pa_mpjpe_m']:.4f}", flush=True)
+
+
 # ------------------------------------------------------------------ summarize
 
 
@@ -820,6 +860,13 @@ def main() -> None:
     d.add_argument("--fold", type=int, default=0)
     d.add_argument("--da-root", type=Path, default=DEFAULT_DA_ROOT)
     d.set_defaults(func=cmd_driveandact)
+
+    x = sub.add_parser("crosseval", help="zero-shot: evaluate the fold models of --tag on another dataset's validation folds")
+    x.add_argument("--folds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
+    x.add_argument("--target-cache-dir", type=Path, default=DEFAULT_DA_CACHE)
+    x.add_argument("--target-index-mapping", type=Path, default=DEFAULT_DA_INDEX)
+    x.add_argument("--target-name", type=str, default="driveandact")
+    x.set_defaults(func=cmd_crosseval)
 
     m = sub.add_parser("summarize")
     m.set_defaults(func=cmd_summarize)
