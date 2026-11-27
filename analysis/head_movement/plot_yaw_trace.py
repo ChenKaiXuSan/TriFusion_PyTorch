@@ -18,6 +18,9 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
+# TrueType (Type 42) fonts: Type 3 fonts are flagged by IEEE PDF eXpress
+matplotlib.rcParams["pdf.fonttype"] = 42
+matplotlib.rcParams["ps.fonttype"] = 42
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -62,11 +65,11 @@ def main() -> None:
     gap = np.isnan(y_single)
     for s, e in zip(*[np.flatnonzero(np.diff(np.concatenate([[0], gap.astype(int), [0]])))[i::2] for i in (0, 1)]):
         ax.axvspan(t[s], t[min(e, len(t) - 1)], color="0.85", lw=0, zorder=0)
-    ax.plot(t, y_rot, color="0.35", lw=1.0, ls="--", label="head-rotation reference")
-    ax.plot(t, y_single, color="#d62728", lw=1.0, alpha=0.9, label=f"single view ({args.single[5:]})")
+    ax.plot(t, y_rot, color="0.2", lw=1.0, ls="--", label="head-rotation reference")
+    ax.plot(t, y_single, color="#E69F00", lw=1.0, alpha=0.95, label=f"single view ({args.single[5:]})")
     if y_also is not None:
-        ax.plot(t, y_also, color="#2ca02c", lw=1.0, alpha=0.9, label="mean fusion" if args.also == "fused_mean" else args.also)
-    ax.plot(t, y_fused, color="#1f77b4", lw=1.3, label="fused (TriPoseFusion)")
+        ax.plot(t, y_also, color="#009E73", lw=1.0, alpha=0.95, label="mean fusion" if args.also == "fused_mean" else args.also)
+    ax.plot(t, y_fused, color="#0072B2", lw=1.4, label="TriPoseFusion")
     ax.set_xlabel("time (s)")
     ax.set_ylabel("head yaw (deg)")
     ax.set_xlim(0, args.duration)

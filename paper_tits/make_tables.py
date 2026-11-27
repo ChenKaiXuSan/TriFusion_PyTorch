@@ -65,7 +65,7 @@ def tab_main() -> None:
     free2 = [("Geometric median", "tf_geomedian"), ("Leave-one-out consensus", "tf_consensus"),
              ("Mean + temporal smooth.", "tf_smooth"), ("Procrustes re-alignment", "tf_gpa")]
     learned = [("Convex view weighting", "gating_nt"), ("Concat-MLP", "concat_mlp"), ("Skeleton-Transformer", "skel_tr"),
-               ("v1 backbone retrained", "tripose64"), ("Lifting-MLP", "lift_mlp"), ("Temporal-CNN", "tcn"),
+               ("v1 design retrained", "tripose64"), ("Lifting-MLP", "lift_mlp"), ("Temporal-CNN", "tcn"),
                ("Residual-only", "resid64"), (METHOD, "setfusion")]
     rows = []
     for label, key in free:
@@ -116,8 +116,8 @@ def tab_groups() -> None:
         lines.append(f"{label} & " + " & ".join(cols[j][i] for j in range(4)) + r" \\")
     mean, tcn, ours = per_env("eqb_mean"), per_env("eqb_tcn"), per_env("eqb_setfusion")
     cell = lambda d, e: f"{d[e][0]:.1f}/{d[e][1]:.1f}"
-    lines += [r"\midrule", r"\multicolumn{5}{c}{\emph{By illumination (MPJPE / PA-MPJPE)}}\\",
-              r" & Day high & Day low & Night high & Night low \\", r"\midrule",
+    lines += [r"\midrule", r"\multicolumn{5}{c}{\emph{By driving condition (MPJPE / PA-MPJPE)}}\\",
+              r" & Day/busy & Day/quiet & Night/busy & Night/quiet \\", r"\midrule",
               "Mean fusion & " + " & ".join(cell(mean, e) for e in ENVS) + r" \\",
               "Temporal-CNN & " + " & ".join(cell(tcn, e) for e in ENVS) + r" \\",
               r"\method{} & " + " & ".join(cell(ours, e) for e in ENVS) + r" \\",
@@ -169,7 +169,7 @@ def tab_da() -> None:
              f"Mean fusion & {pair(tf('fuse_mean'))} & -- & -- & {noise_mean:.1f} \\\\",
              f"Oracle excl.\\ view & -- & -- & -- & {noise_orc:.1f} \\\\", r"\midrule"]
     rows = [("Convex view weighting", "gating_nt"), ("Concat-MLP", "concat_mlp"), ("Skeleton-Transformer", "skel_tr"),
-            ("v1 backbone retrained", "tripose64"), ("Lifting-MLP", "lift_mlp"), ("Temporal-CNN", "tcn"), ("Residual-only", "resid64"),
+            ("v1 design retrained", "tripose64"), ("Lifting-MLP", "lift_mlp"), ("Temporal-CNN", "tcn"), ("Residual-only", "resid64"),
             (METHOD, "setfusion")]
     data = []
     for label, tag in rows:
@@ -213,7 +213,7 @@ def tab_ablation() -> None:
             (r"\;-- skeleton attention", "setfusion_nojoint"), (r"\;-- temporal conv.", "setfusion_notemporal"),
             (r"\;wider, $d{=}64$", "setfusion_d64"), (r"\;wider, $d{=}128$", "setfusion_d128"),
             ("Hybrid (set gate + raw-coord.\\ residual)", "setres"), ("Residual-only", "resid64"),
-            ("v1 backbone (h64)", "tripose64"), ("v1 backbone (h128, original capacity)", "tripose128")]
+            ("v1 design (hidden 64)", "tripose64"), ("v1 design (hidden 128, original)", "tripose128")]
     data = []
     for label, tag in rows:
         rs = folds(f"eqb_{tag}")
