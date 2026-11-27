@@ -179,7 +179,7 @@ def tab_da() -> None:
         st = [json.loads(p.read_text()) for p in sorted((ROOT / f"daeq_{tag}").glob("fold[0-9]/stress_noise.json"))]
         assert len(st) == 3, tag
         nz = MM * np.mean([np.mean([f[v]["learned"]["mpjpe_m"] for v in VIEWS]) for f in st])
-        data.append((label, z, res("daeqlf"), res("daeq"), nz))
+        data.append((label, z, res("daeqsc"), res("daeq"), nz))  # rig ref. = self-calibrated extrinsics (daeqlf: official)
     bz = bold([d[1][1] for d in data], ".1f")
     bl, bd, bn = bold([d[2][1] for d in data], ".1f"), bold([d[3][1] for d in data], ".1f"), bold([d[4] for d in data], ".1f")
     for i, (label, z, lf, ds, nz) in enumerate(data):

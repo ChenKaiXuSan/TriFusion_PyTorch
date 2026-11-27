@@ -448,6 +448,11 @@ front/right 从官方外参扰动 0°/10°/20°/30°/45°（中心偏移 0/5/10/
 - 原"Rig ref."无标注重训的三角化参考用的是**官方标定**（build_driveandact_cache_selftri.py），稿件未交代。
   用 30°/15 cm 起点的自标定外参重建缓存 `learned_fusion_cache_driveandact_selfcalib`：参考相对官方 GT 的 9 关节 PA 18.3 mm（官方标定版 18.0）。
   9 个模型重训：`pegasus/da_selfcalib_job.sh`（请求 323185[]，标签 daeqsc_<name>）。
+- 重训结果（MPJPE/PA，3 折均值；官方外参 daeqlf → 自标定外参 daeqsc）：主模型 22.3/20.8 → 22.9/21.3；tcn 22.4/20.4 → 22.3/20.3；
+  resid64 22.2/20.7 → 22.5/20.9；lift_mlp 23.8/21.3 → 24.4/21.9；tripose64 24.4/21.6 → 25.4/23.0；其余变化 ≤0.3 mm。PA 变化 −0.1 到 +1.4 mm。
+  **稿件表 VI 的 Rig ref. 一栏改为自标定版**（label- and calibration-free），正文保留官方外参版作对照；摘要 20.8 → 21.3 mm、
+  "on par with the best compared method" → "on par with the compared methods"（tcn 20.3 最低，差 1.0 mm，在折间波动 ±2–4 mm 内）。
+  腕部"大回归器更低"只在官方 3D 参考下成立，已注明。摘要 249 词，仍 10 页。
 
 ## 6. 待办
 

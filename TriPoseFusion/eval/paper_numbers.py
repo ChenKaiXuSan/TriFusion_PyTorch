@@ -178,7 +178,8 @@ def sec_da() -> None:
              f" (PA {MM * min(x['learned_mean']['pa_mpjpe_m'] for x in zs):.1f}-{MM * max(x['learned_mean']['pa_mpjpe_m'] for x in zs):.1f})"
              if zs else "zero-shot n/a")
         cells = []
-        for name, pre in (("dataset-ref", "daeq"), ("label-free", "daeqlf"), ("6000", "daeq6k")):
+        for name, pre in (("dataset-ref", "daeq"), ("label-free, official extrinsics", "daeqlf"),
+                          ("label-free, self-calibrated extrinsics", "daeqsc"), ("6000", "daeq6k")):
             c = da_cell(folds(f"{pre}_{tag}"))
             cells.append(f"{name}: {c[0]} / {c[1]} wrists {c[2]:.1f}" if c else f"{name}: n/a")
         print(f"{tag:11s} {z} | " + " | ".join(cells))
