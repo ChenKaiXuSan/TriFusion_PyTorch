@@ -35,6 +35,14 @@ for _p in (str(_EVAL_DIR), str(_EVAL_DIR.parent)):
 from eval_fusion_baselines_pesudo_gt import canonicalize_pose  # noqa: E402  (same pipeline as the paper)
 
 FPS = 29.97
+# The Label Studio annotations (glance ranges and the start/mid/end drive marks) count frames
+# at Label Studio's default 24 fps, not at the 29.97 fps of the videos:
+#   video_frame = label_frame * 29.97 / 24.
+# Evidence: end/24 equals the video duration for all 88 sequences, and the label-vs-head-yaw
+# correlation peaks at a time scale of 1.245-1.250.  Until 2026-11-27 the labels were used as
+# video frames directly, which misaligned every label-dependent column and shifted the drive
+# window; `--label-fps 29.97` reproduces that old behaviour.
+LABEL_FPS = 24.0
 # SAM3D / MHR 127-joint skeleton (same camera frame as the 70 keypoints)
 MHR_NECK, MHR_LSHO, MHR_RSHO = 112, 75, 39
 MHR_SKULL, MHR_NOSE, MHR_REYE, MHR_LEYE = 114, 121, 123, 125
@@ -152,7 +160,8 @@ def match_events(pred: list, gt: list) -> tuple[int, int, int]:
 
 # ----------------------------------------------------------------- loading
 
-def load_labels(path: Path):
+def load_labels(path: Path, scale: float = 1.0):
+    """Glance ranges per annotator, converted to video frame numbers (label frame * scale)."""
     d = json.load(open(path, encoding="utf-8"))
     per_rater = []
     for a in d["annotations"]:
@@ -160,12 +169,12 @@ def load_labels(path: Path):
         for vl in a.get("videoLabels", []):
             for r in vl["ranges"]:
                 for lab in vl["timelinelabels"]:
-                    segs.append((int(r["start"]), int(r["end"]), lab))
+                    segs.append((int(round(r["start"] * scale)), int(round(r["end"] * scale)), lab))
         per_rater.append(segs)
     return per_rater
 
 
-def load_splits(path: Path) -> dict:
+def load_splits(path: Path, scale: float = 1.0) -> dict:
     out = {}
     for task in json.load(open(path, encoding="utf-8")):
         video = Path(task["data"]["video"]).name.replace("_h265.mp4", "")
@@ -174,7 +183,7 @@ def load_splits(path: Path) -> dict:
             for r in ann["result"]:
                 v = r["value"]
                 for lab in v["timelinelabels"]:
-                    marks[lab] = int(v["ranges"][0]["start"])
+                    marks[lab] = int(round(v["ranges"][0]["start"] * scale))
         out[video] = marks
     return out
 
@@ -185,7 +194,7 @@ def analyse_sequence(name: str, args, splits: dict, det_grid: dict) -> dict:
     person, env_jp = name[:2], name[3:]
     env = ENV_MAP[env_jp]
     video = f"person_{person}_{env}"
-    raters = load_labels(args.label_dir / f"{video}_h265.json")
+    raters = load_labels(args.label_dir / f"{video}_h265.json", FPS / args.label_fps)
     n_raters = len(raters)
     f = np.load(args.fused_dir / f"{name}.npz", allow_pickle=True)
     frame_ids = f["frame_ids"].astype(int)
@@ -260,6 +269,15 @@ def analyse_sequence(name: str, args, splits: dict, det_grid: dict) -> dict:
     yaw_abs = np.where(sel >= 0, yaw_a[np.clip(sel, 0, None)], np.nan)
     pitch_abs = np.where(sel >= 0, pitch_a[np.clip(sel, 0, None)], np.nan)
     in_drive = (frame_ids >= start) & (frame_ids <= end)
+    # The keypoints may cover only part of the annotated drive [start, end] (SAM3D inference
+    # was run on label frame numbers used as video frames, i.e. up to ~80 % of the drive).
+    # AI measures are rates over the covered part; label-vs-AI comparisons use only the
+    # annotated events inside the covered window.
+    covered_min = max(int(in_drive.sum()), 1) / FPS / 60.0
+    coverage = float(in_drive.sum()) / max(end - start + 1, 1)
+    cov_lo, cov_hi = (int(frame_ids[in_drive][0]), int(frame_ids[in_drive][-1])) if in_drive.any() else (0, -1)
+    h_events_cov = [ev for ev in h_events if ev[1] >= cov_lo and ev[0] <= cov_hi]
+    v_events_cov = [ev for ev in v_events if ev[1] >= cov_lo and ev[0] <= cov_hi]
 
     # --- primary: head orientation from SAM3D head-joint rotations, fused over views
     #     (camera frame -> world/cabin frame with the per-sequence extrinsics, chordal mean,
@@ -396,8 +414,8 @@ def analyse_sequence(name: str, args, splits: dict, det_grid: dict) -> dict:
 
     ai_stats = {
         "ai_horizontal_turns": len(ai_h), "ai_vertical_turns": len(ai_v),
-        "ai_horizontal_turns_per_min": round(len(ai_h) / duration_min, 2),
-        "ai_vertical_turns_per_min": round(len(ai_v) / duration_min, 2),
+        "ai_horizontal_turns_per_min": round(len(ai_h) / covered_min, 2),
+        "ai_vertical_turns_per_min": round(len(ai_v) / covered_min, 2),
         "ai_left_turns": sum(1 for *_, pk in ai_h if pk < 0), "ai_right_turns": sum(1 for *_, pk in ai_h if pk > 0),
         "ai_up_turns": sum(1 for *_, pk in ai_v if pk > 0), "ai_down_turns": sum(1 for *_, pk in ai_v if pk < 0),
         "ai_horizontal_peak_deg_mean": round(float(np.mean([abs(pk) for *_, pk in ai_h])), 1) if ai_h else None,
@@ -414,18 +432,23 @@ def analyse_sequence(name: str, args, splits: dict, det_grid: dict) -> dict:
         m = np.abs(series["yaw_rel"]) > theta
         m &= in_drive
         pred = [(frame_ids[s], frame_ids[e]) for s, e in runs(m, 3) if e - s + 1 >= tmin]
-        det[("horizontal", theta, tmin)] = match_events(pred, [(s, e) for s, e, _ in h_events])
+        det[("horizontal", theta, tmin)] = match_events(pred, [(s, e) for s, e, _ in h_events_cov])
     for (theta, tmin) in det_grid["vertical"]:
         m = np.abs(series["pitch_rel"]) > theta
         m &= in_drive
         pred = [(frame_ids[s], frame_ids[e]) for s, e in runs(m, 3) if e - s + 1 >= tmin]
-        det[("vertical", theta, tmin)] = match_events(pred, [(s, e) for s, e, _ in v_events])
+        det[("vertical", theta, tmin)] = match_events(pred, [(s, e) for s, e, _ in v_events_cov])
 
     yaw_d = series["yaw_rel"][in_drive]
     pitch_d = series["pitch_rel"][in_drive]
     rec = {
         "sequence": name, "person": person, "environment": env, "environment_jp": env_jp,
         "drive_start_frame": int(start), "drive_end_frame": int(end), "drive_minutes": round(duration_min, 2),
+        "keypoint_covered_minutes": round(covered_min, 2), "keypoint_coverage_of_drive": round(coverage, 3),
+        "horizontal_turns_in_covered_window": len(h_events_cov), "vertical_turns_in_covered_window": len(v_events_cov),
+        "horizontal_turns_per_min_in_covered_window": round(len(h_events_cov) / covered_min, 2),
+        "vertical_turns_per_min_in_covered_window": round(len(v_events_cov) / covered_min, 2),
+        "label_fps": args.label_fps,
         "n_annotators": n_raters,
         "horizontal_turns": len(h_events), "vertical_turns": len(v_events),
         "horizontal_turns_per_min": round(len(h_events) / duration_min, 2),
@@ -485,9 +508,14 @@ def main() -> None:
     ap.add_argument("--head-rot-dir", type=Path, default=D / "sam3d_head_rot_cache",
                     help="per-sequence SAM3D head-joint rotations (extract_sam3d_head_rotation.py)")
     ap.add_argument("--sequences", nargs="*", default=None, help="subset of <person>_<env> names (debug)")
-    ap.add_argument("--source", default="fused_v3",
-                    choices=["fused_v3", "fused_full", "fused_mean", "fused_median", "view_front", "view_left", "view_right"],
-                    help="keypoint source for the head angles (all in the canonical body frame)")
+    ap.add_argument("--source", default="fused_main",
+                    choices=["fused_main", "fused_v3", "fused_full", "fused_mean", "fused_median",
+                             "view_front", "view_left", "view_right"],
+                    help="keypoint source for the head angles (all in the canonical body frame); "
+                         "fused_main = the paper's main model (SetFusion 27.9K, equal-budget training)")
+    ap.add_argument("--label-fps", type=float, default=LABEL_FPS,
+                    help="frame rate of the annotation frame numbers (Label Studio default 24); "
+                         "29.97 reproduces the pre-2026-11-27 (misaligned) behaviour")
     ap.add_argument("--prefer-mhr", action="store_true",
                     help="use fused MHR head joints as the primary angle source instead of the 52-joint fused_v3")
     ap.add_argument("--export-mhr", action="store_true",
@@ -496,7 +524,7 @@ def main() -> None:
     (args.out_dir / "per_sequence").mkdir(parents=True, exist_ok=True)
     (args.out_dir / "figures").mkdir(exist_ok=True)
 
-    splits = load_splits(args.split_json)
+    splits = load_splits(args.split_json, FPS / args.label_fps)
     det_grid = {"horizontal": [(th, t) for th in (10, 15, 20, 25, 30, 40) for t in (3, 6, 9)],
                 "vertical": [(th, t) for th in (5, 8, 10, 15, 20) for t in (3, 6, 9)]}
     names = sorted(p.stem for p in args.fused_dir.glob("*.npz"))
@@ -518,6 +546,9 @@ def main() -> None:
 
     # ---- summary tables
     cols = ["sequence", "person", "environment", "drive_minutes",
+            "keypoint_covered_minutes", "keypoint_coverage_of_drive",
+            "horizontal_turns_in_covered_window", "vertical_turns_in_covered_window",
+            "horizontal_turns_per_min_in_covered_window", "vertical_turns_per_min_in_covered_window",
             "ai_horizontal_turns", "ai_vertical_turns", "ai_horizontal_turns_per_min", "ai_vertical_turns_per_min",
             "ai_left_turns", "ai_right_turns", "ai_up_turns", "ai_down_turns",
             "ai_horizontal_peak_deg_mean", "ai_horizontal_peak_deg_max", "ai_vertical_peak_deg_mean",

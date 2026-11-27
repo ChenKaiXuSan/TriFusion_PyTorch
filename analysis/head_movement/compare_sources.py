@@ -15,15 +15,19 @@ from pathlib import Path
 
 import numpy as np
 
-SOURCES = ["fused_v3", "fused_full", "fused_mean", "fused_median", "view_front", "view_left", "view_right"]
-LABEL = {"fused_v3": "v3 融合(残差8K)", "fused_full": "v3 融合(full 28K)", "fused_mean": "均值融合", "fused_median": "中位数融合",
+REF = "fused_main"   # the paper's main model; every other source is compared against it
+SOURCES = ["fused_main", "fused_full", "fused_v3", "fused_mean", "fused_median", "view_front", "view_left", "view_right"]
+LABEL = {"fused_main": "主模型（SetFusion 28K，统一训练量）", "fused_full": "SetFusion 28K（旧，小训练量）",
+         "fused_v3": "残差 8K（旧称 v3）", "fused_mean": "均值融合", "fused_median": "中位数融合",
          "view_front": "单视角 front", "view_left": "单视角 left", "view_right": "单视角 right"}
 KEYS = ["ai_horizontal_turns_per_min", "ai_horizontal_peak_deg_mean", "ai_vertical_turns_per_min",
         "ai_horizontal_turn_duration_s_mean", "yaw_p95_abs_deg", "annotated_glances_with_head_turn_ge15",
-        "yaw_keypoint_vs_rotation_corr"]
+        "ai_turns_overlapping_annotated_glance", "sign_agreement_horizontal", "yaw_keypoint_vs_rotation_corr"]
 NAMES = {"ai_horizontal_turns_per_min": "水平转头 次/分", "ai_horizontal_peak_deg_mean": "水平峰值角 (度)",
          "ai_vertical_turns_per_min": "垂直转头 次/分", "ai_horizontal_turn_duration_s_mean": "每次持续 (秒)",
          "yaw_p95_abs_deg": "yaw 95 分位 (度)", "annotated_glances_with_head_turn_ge15": "瞥视中伴随≥15°转头比例",
+         "ai_turns_overlapping_annotated_glance": "AI 转头落在人工瞥视上的比例",
+         "sign_agreement_horizontal": "瞥视方向与 yaw 符号一致率",
          "yaw_keypoint_vs_rotation_corr": "与旋转矩阵核对相关"}
 
 
@@ -44,7 +48,7 @@ def main() -> None:
     args = ap.parse_args()
     data = {s: load(args.root, s) for s in SOURCES}
     data = {s: d for s, d in data.items() if d}
-    ref = data.get("fused_v3", {})
+    ref = data.get(REF, {})
     seqs = sorted(set.intersection(*[set(d) for d in data.values()])) if data else []
 
     rows = []
@@ -54,13 +58,13 @@ def main() -> None:
             row[f"mean_{k}"] = round(float(np.nanmean([d[q][k] for q in d])), 2)
         # agreement with v3 across drives (Spearman) for the two hypothesis measures
         for k in ("ai_horizontal_turns_per_min", "ai_horizontal_peak_deg_mean"):
-            if ref and s != "fused_v3":
+            if ref and s != REF:
                 a = np.array([d[q][k] for q in seqs]); b = np.array([ref[q][k] for q in seqs])
                 m = np.isfinite(a) & np.isfinite(b)
                 from scipy.stats import spearmanr
                 row[f"spearman_vs_v3_{k}"] = round(float(spearmanr(a[m], b[m]).correlation), 3) if m.sum() > 5 else None
             else:
-                row[f"spearman_vs_v3_{k}"] = 1.0 if s == "fused_v3" else None
+                row[f"spearman_vs_v3_{k}"] = 1.0 if s == REF else None
         rows.append(row)
 
     cols = list(rows[0].keys())
@@ -73,14 +77,15 @@ def main() -> None:
         fh.write("# 不同关节点来源的头部运动结果对比（88 段驾驶）\n\n")
         fh.write("同一分析流程、同一阈值，只换头部关节点的来源。所有来源都在同一 canonical 身体坐标系中"
                  "（单视角 = 该视角 SAM3D 关节点经自身 canonicalize；均值/中位数 = 三视角 canonicalize 后融合）。\n\n")
-        fh.write("| 来源 | " + " | ".join(NAMES[k] for k in KEYS) + " | 与 v3 的一致性（转头频率 / 峰值角，Spearman） |\n")
+        fh.write("| 来源 | " + " | ".join(NAMES[k] for k in KEYS) + " | 与主模型的一致性（转头频率 / 峰值角，Spearman） |\n")
         fh.write("|---|" + "---|" * (len(KEYS) + 1) + "\n")
         for r in rows:
             fh.write(f"| {r['label']} | " + " | ".join(
                 "" if np.isnan(r[f"mean_{k}"]) else f"{r[f'mean_{k}']:.2f}" for k in KEYS) +
                 f" | {r['spearman_vs_v3_ai_horizontal_turns_per_min']} / {r['spearman_vs_v3_ai_horizontal_peak_deg_mean']} |\n")
         fh.write("\n说明：\n- 数值为 88 段的平均；每段的数字在各来源子目录的 `summary_by_sequence.csv`。\n"
-                 "- \"与 v3 的一致性\"：按段比较两种来源给出的转头频率/峰值角的排序相关（1 = 完全一致）。\n"
+                 "- \"与主模型的一致性\"：按段比较该来源与主模型（fused_main）给出的转头频率/峰值角的排序相关（1 = 完全一致）。\n"
+                 "- 人工标注帧号已按 24 fps → 29.97 fps 换算；AI 指标按关节点实际覆盖的驾驶时长计算。\n"
                  "- \"与旋转矩阵核对相关\"只在已生成核对信号的段上有值（提取完成后填满）。\n")
 
     # figure: per-drive AI horizontal turns/min, each source vs v3
@@ -89,15 +94,15 @@ def main() -> None:
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         (args.root / "figures_method_comparison").mkdir(exist_ok=True)
-        others = [s for s in data if s != "fused_v3"]
+        others = [s for s in data if s != REF]
         fig, axes = plt.subplots(1, len(others), figsize=(3.6 * len(others), 3.6))
         for ax, s in zip(np.atleast_1d(axes), others):
             a = [data[s][q]["ai_horizontal_turns_per_min"] for q in seqs]
             b = [ref[q]["ai_horizontal_turns_per_min"] for q in seqs]
             ax.scatter(b, a, s=12); lim = max(max(a), max(b)) * 1.05
-            ax.plot([0, lim], [0, lim], "k--", lw=0.7); ax.set_xlabel("fused_v3 turns/min"); ax.set_ylabel(f"{s} turns/min")
+            ax.plot([0, lim], [0, lim], "k--", lw=0.7); ax.set_xlabel(f"{REF} turns/min"); ax.set_ylabel(f"{s} turns/min")
             ax.set_title(s)
-        fig.suptitle("AI horizontal head turns per minute: each source vs fused_v3 (one point = one drive)")
+        fig.suptitle(f"AI horizontal head turns per minute: each source vs {REF} (one point = one drive)")
         fig.tight_layout(); fig.savefig(args.root / "figures_method_comparison" / "turns_per_min_vs_v3.png", dpi=150)
         plt.close(fig)
         fig, ax = plt.subplots(figsize=(9, 4))
