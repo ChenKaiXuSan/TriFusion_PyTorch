@@ -257,7 +257,63 @@ def sec_paired() -> None:
         print(line)
 
 
-SECTIONS = {"main": sec_main, "groups": sec_groups, "paired": sec_paired, "stress": sec_stress, "da": sec_da, "misc": sec_misc}
+# ------------------------------------------------------------------ seed variance
+SEED_TAGS = ("setfusion", "resid64", "tcn", "lift_mlp")
+
+
+def seed_runs(tag: str) -> dict[int, str]:
+    """seed -> run tag; seed 42 is the original eqb_<tag> run, 43/44 are eqb_<tag>_s43/_s44."""
+    return {42: f"eqb_{tag}", 43: f"eqb_{tag}_s43", 44: f"eqb_{tag}_s44"}
+
+
+def sec_seeds() -> None:
+    head("SEED VARIANCE (seeds 42/43/44, common budget; per seed the 5-fold mean, mm)")
+    perseq_all = {}
+    for tag in SEED_TAGS:
+        per_seed, line = {}, f"{tag:12s}"
+        for seed, run in seed_runs(tag).items():
+            rs = folds(run)
+            if len(rs) < 5:
+                line += f"  s{seed}: {len(rs)} folds"
+                continue
+            m = MM * np.mean([r["learned_last"]["mpjpe_m"] for r in rs])
+            p = MM * np.mean([r["learned_last"]["pa_mpjpe_m"] for r in rs])
+            per_seed[seed] = (m, p)
+            line += f"  s{seed} {m:6.1f}/{p:5.1f}"
+            for r in rs:
+                for s in r["per_sequence_learned"]:
+                    perseq_all.setdefault(tag, {}).setdefault((s["person"], s["env"]), {})[seed] = (
+                        s["metrics"]["mpjpe_m"], s["metrics"]["pa_mpjpe_m"])
+        if len(per_seed) == 3:
+            ms_, ps_ = np.array([v[0] for v in per_seed.values()]), np.array([v[1] for v in per_seed.values()])
+            line += (f"  | MPJPE {ms_.mean():6.1f} +- {ms_.std(ddof=1):4.1f} ({ms_.min():.1f}-{ms_.max():.1f})"
+                     f"  PA {ps_.mean():5.1f} +- {ps_.std(ddof=1):4.1f} ({ps_.min():.1f}-{ps_.max():.1f})")
+        print(line)
+    head("SEED-AVERAGED PAIRED DIFFERENCE vs setfusion (other - setfusion, mm; per-sequence error averaged over "
+         "the 3 seeds; subject-level bootstrap, 10000 resamples, 95% interval; negative = other model better)")
+    base = {k: v for k, v in perseq_all.get("setfusion", {}).items() if len(v) == 3}
+    for tag in SEED_TAGS[1:]:
+        o = {k: v for k, v in perseq_all.get(tag, {}).items() if len(v) == 3}
+        keys = sorted(set(base) & set(o))
+        if len(keys) != 88:
+            print(f"{tag:12s} {len(keys)} sequences with all seeds, skipped")
+            continue
+        subj = sorted({k[0] for k in keys})
+        line = f"{tag:12s}"
+        for j, lab in ((0, "MPJPE"), (1, "PA")):
+            d = MM * np.array([np.mean([o[k][s][j] for s in (42, 43, 44)]) - np.mean([base[k][s][j] for s in (42, 43, 44)]) for k in keys])
+            by = {u: d[[i for i, k in enumerate(keys) if k[0] == u]] for u in subj}
+            rng = np.random.default_rng(20261127)
+            bs = [np.concatenate([by[u] for u in rng.choice(subj, len(subj))]).mean() for _ in range(10000)]
+            lo, hi = np.percentile(bs, [2.5, 97.5])
+            same = [MM * np.mean([o[k][s][j] - base[k][s][j] for k in keys]) for s in (42, 43, 44)]
+            line += (f"  {lab} {d.mean():+6.1f} [{lo:+5.1f}, {hi:+5.1f}] other better on {int((d < 0).sum()):2d}/88"
+                     f" (same-seed pairs {'/'.join(f'{x:+.1f}' for x in same)})")
+        print(line)
+
+
+SECTIONS = {"main": sec_main, "groups": sec_groups, "paired": sec_paired, "stress": sec_stress, "da": sec_da, "misc": sec_misc,
+            "seeds": sec_seeds}
 
 if __name__ == "__main__":
     for name in (sys.argv[1:] or list(SECTIONS)):
