@@ -157,7 +157,11 @@ head_movement_analysis/
 
 ---
 
-## 5. 主表 `summary_by_sequence.csv` 的各列
+## 5. 各文件的表头
+
+逐帧文件 `*_angles.csv` 的各列见 §4。以下 5.1 为主表，5.2–5.8 为其余文件。
+
+### 5.1 主表 `summary_by_sequence.csv`
 
 括号内为 88 段的平均值。
 
@@ -175,7 +179,7 @@ head_movement_analysis/
 | 列 | 含义 |
 |---|---|
 | `horizontal_turns_in_covered_window`、`vertical_turns_in_covered_window` | 有关键点范围内的左右 / 上下瞥视次数（15.0 / 18.0） |
-| `horizontal_turns_per_min_in_covered_window`、`vertical_..._in_covered_window` | 同上，每分钟（3.41 / 4.00）。**与算法指标比较时用这两列** |
+| `horizontal_turns_per_min_in_covered_window`、`vertical_turns_per_min_in_covered_window` | 同上，每分钟（3.41 / 4.00）。**与算法指标比较时用这两列** |
 | `horizontal_turns`、`vertical_turns` | 整段驾驶的左右 / 上下瞥视次数（17.7 / 22.6） |
 | `horizontal_turns_per_min`、`vertical_turns_per_min` | 同上，按整段驾驶时长（3.13 / 3.90） |
 | `left_turns`、`right_turns`、`up_turns`、`down_turns` | 整段驾驶中各方向的瞥视次数（10.3 / 6.6 / 2.9 / 18.5） |
@@ -218,6 +222,110 @@ head_movement_analysis/
 | `angle_source` | 角度来源（`fused_main_keypoints`） |
 | `n_views_mean` | 平均可用视角数（3.0） |
 | `yaw_keypoint_vs_rotation_corr` | 关节点 yaw 与独立核对信号的相关。低于 0.5 说明该段测量失效（主模型 0.843，范围 0.59–0.96，无失效段） |
+
+### 5.2 按人、按环境汇总：`summary_by_person.csv`、`summary_by_environment.csv`
+
+两张表都是把主表的 12 个指标按人（每人 4 段）或按环境（每种 22 段）取平均，空值不计入。这 12 个指标依次为：
+`ai_horizontal_turns_per_min`、`ai_vertical_turns_per_min`、`ai_horizontal_peak_deg_mean`、`ai_vertical_peak_deg_mean`、
+`ai_horizontal_turn_duration_s_mean`、`horizontal_turns_per_min`、`vertical_turns_per_min`、`yaw_p95_abs_deg`、`pitch_p95_abs_deg`、
+`horizontal_event_peak_yaw_deg_mean`、`vertical_event_peak_pitch_deg_mean`、`mean_turn_duration_s`，含义同主表。
+其中人工瞥视频率是按整段驾驶计算的那两列，不是 `_in_covered_window` 列。
+
+| 列 | 含义 |
+|---|---|
+| `person` | 受试者编号（按人汇总） |
+| `environment`、`environment_jp` | 环境的英文代号与日文原名（按环境汇总） |
+| `n_sequences` | 参与平均的段数（按人为 4，按环境为 22） |
+| `horizontal_turns_per_min_day_high`、`horizontal_turns_per_min_day_low`、`horizontal_turns_per_min_night_high`、`horizontal_turns_per_min_night_low` | 仅按人汇总有：该人在每种环境下的**人工**左右瞥视频率（按整段驾驶计）。注意不是算法检出的转头 |
+
+### 5.3 环境检验：`environment_tests.csv`
+
+每行一个指标，检验都按人配对。
+
+| 列 | 含义 |
+|---|---|
+| `measure` | 被检验的指标（主表列名）：`ai_horizontal_turns_per_min`、`ai_vertical_turns_per_min`、`ai_horizontal_peak_deg_mean`、`horizontal_turns_per_min`、`vertical_turns_per_min`、`yaw_p95_abs_deg` |
+| `n_persons` | 4 种环境都有数据的人数（22） |
+| `friedman_p_4env` | 4 种环境之间是否有差异的 Friedman 检验 p 值 |
+| `mean_day`、`mean_night` | 每人先取白天两段（昼多い、昼少ない）或夜间两段的平均，再对 22 人平均 |
+| `wilcoxon_p_day_vs_night` | 白天与夜间的 Wilcoxon 符号秩检验 p 值 |
+| `mean_high_light`、`mean_low_light` | 每人先取"多い"两段或"少ない"两段的平均，再对人平均。列名中的 light 沿用代码命名，"多い / 少ない"的含义待确认 |
+| `wilcoxon_p_high_vs_low` | 多い与少ない的 Wilcoxon 符号秩检验 p 值 |
+
+p < 0.05 通常视为差异显著。
+
+### 5.4 标注者一致性：`annotator_agreement.csv`
+
+| 列 | 含义 |
+|---|---|
+| `sequence` | 段名 |
+| `kappa_horizontal`、`kappa_vertical` | 3 位标注者的 Fleiss κ，同主表 |
+| `annotator_counts_horizontal`、`annotator_counts_vertical` | 3 位标注者**各自**在驾驶区间内标出的左右 / 上下事件数，例如 `[27, 13, 19]` |
+| `majority_horizontal`、`majority_vertical` | 至少 2 人一致后的事件数，等于主表的 `horizontal_turns`、`vertical_turns`（整段驾驶） |
+
+### 5.5 检出准确度：`detection_accuracy.csv`
+
+每行一种阈值组合，88 段合并计算；人工瞥视只算有关键点的范围（§3.6）。
+
+| 列 | 含义 |
+|---|---|
+| `axis` | `horizontal`（左右）或 `vertical`（上下） |
+| `threshold_deg` | 角度阈值：左右 10、15、20、25、30、40°；上下 5、8、10、15、20° |
+| `min_frames` | 最短持续帧数：3、6、9 帧（0.1、0.2、0.3 秒） |
+| `TP` | 命中：检出的转头与一次尚未配对的人工瞥视在时间上重叠 |
+| `FP` | 检出了，但没有对应的人工瞥视 |
+| `FN` | 有人工瞥视，但没有被检出 |
+| `precision` | 精确率 = TP ÷ (TP + FP) |
+| `recall` | 召回率 = TP ÷ (TP + FN) |
+| `F1` | 精确率与召回率的调和平均 |
+
+主分析采用的是 15°、6 帧（左右）和 10°、6 帧（上下）。
+
+### 5.6 方向一致率：`glance_direction_agreement.csv`、`glance_direction_agreement_per_sequence.csv`
+
+在顶层目录，6 个关节点来源各一行（第二个文件为每个来源 × 每段一行）。
+
+| 列 | 含义 |
+|---|---|
+| `source` | 关节点来源（子目录名） |
+| `sequence` | 段名（仅逐段文件有） |
+| `events` | 人工多数标注的左右瞥视区间数。只算驾驶区间内有关键点的帧，左、右分别成段 |
+| `decided` | 其中头部 yaw 的平均值偏离驾驶中位数 ≥3°、能判定方向的区间数 |
+| `agree` | `decided` 中方向与标注一致的区间数 |
+| `agreement` | 方向一致率 = agree ÷ decided（主模型 0.963） |
+| `coverage` | 能判定方向的比例 = decided ÷ events（主模型 0.83）。与关键点覆盖率无关 |
+
+### 5.7 来源对比：`method_comparison.csv`
+
+在顶层目录，6 个关节点来源各一行；`method_comparison.md` 是同一张表的中文版。
+
+| 列 | 含义 |
+|---|---|
+| `source` | 关节点来源（子目录名） |
+| `label` | 来源的中文名称 |
+| `n_sequences` | 段数（88） |
+| `mean_ai_horizontal_turns_per_min`、`mean_ai_horizontal_peak_deg_mean`、`mean_ai_vertical_turns_per_min`、`mean_ai_horizontal_turn_duration_s_mean`、`mean_yaw_p95_abs_deg`、`mean_annotated_glances_with_head_turn_ge15`、`mean_ai_turns_overlapping_annotated_glance`、`mean_sign_agreement_horizontal`、`mean_yaw_keypoint_vs_rotation_corr` | 去掉前缀 `mean_` 后即主表的同名列，这里是该来源 88 段的平均 |
+| `spearman_vs_main_ai_horizontal_turns_per_min`、`spearman_vs_main_ai_horizontal_peak_deg_mean` | 该来源与主模型在 88 段上转头频率、峰值角的 Spearman 等级相关，即两者对"哪段转得多、转得大"的排序是否一致（1 = 完全一致；主模型自身记 1.0） |
+
+### 5.8 JSON 文件
+
+`analysis_summary.json`：
+
+| 键 | 含义 |
+|---|---|
+| `best_detection` | `horizontal`、`vertical` 各一项：`detection_accuracy.csv` 中 F1 最高的阈值组合，含 `theta`（角度阈值）、`min_frames`、`precision`、`recall`、`f1` |
+| `environment_tests` | 与 `environment_tests.csv` 相同的内容，每行为一个列表，顺序同该表的列 |
+
+`per_sequence/<人>_<环境>.json`：包含主表的全部列，另有：
+
+| 键 | 含义 |
+|---|---|
+| `environment_jp` | 环境的日文原名 |
+| `drive_start_frame`、`drive_end_frame` | 驾驶区间起止的视频帧号（已换算帧率） |
+| `label_fps` | 标注帧率（24.0） |
+| `n_annotators` | 标注者人数（3） |
+| `per_annotator_horizontal`、`per_annotator_vertical` | 各标注者的事件数，同 `annotator_agreement.csv` |
+| `horizontal_event_peak_yaw_deg_median` | 人工左右瞥视期间峰值 yaw 的中位数 |
 
 ---
 
