@@ -1,0 +1,127 @@
+6 runs, levels [0, 10, 20, 30, 45], 3 seeds; in-house focal 246.5 px
+vp13/run1_2018-05-29-15-21-10 rot  0 seed 0: rot err F 4.37 R 5.44 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.2 mm (official 42.2)
+vp13/run2_2018-05-30-11-34-54 rot  0 seed 0: rot err F 5.64 R 4.55 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.5 mm (official 37.0)
+vp5/run1_2018-05-22-15-10-41 rot  0 seed 0: rot err F 4.11 R 3.69 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.3 mm (official 52.6)
+vp11/run2_2018-05-24-14-35-56 rot  0 seed 0: rot err F 3.65 R 4.91 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp5/run2b_2018-05-22-15-50-07 rot  0 seed 0: rot err F 5.54 R 5.78 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp11/run1_2018-05-24-13-44-01 rot  0 seed 0: rot err F 4.39 R 3.98 deg | centre F 36 R 44 mm | baseline +1.1% | body14 49.2 mm (official 31.5)
+vp13/run1_2018-05-29-15-21-10 rot 10 seed 0: rot err F 4.37 R 5.44 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.3 mm (official 42.2)
+vp5/run1_2018-05-22-15-10-41 rot 10 seed 0: rot err F 4.11 R 3.70 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.2 mm (official 52.6)
+vp11/run2_2018-05-24-14-35-56 rot 10 seed 0: rot err F 3.65 R 4.91 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp5/run2b_2018-05-22-15-50-07 rot 10 seed 0: rot err F 5.54 R 5.78 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp11/run1_2018-05-24-13-44-01 rot 10 seed 0: rot err F 4.39 R 3.98 deg | centre F 36 R 44 mm | baseline +1.1% | body14 49.2 mm (official 31.5)
+vp13/run2_2018-05-30-11-34-54 rot 10 seed 0: rot err F 5.64 R 4.55 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.5 mm (official 37.0)
+vp13/run1_2018-05-29-15-21-10 rot 10 seed 1: rot err F 4.37 R 5.44 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.2 mm (official 42.2)
+vp5/run1_2018-05-22-15-10-41 rot 10 seed 1: rot err F 4.11 R 3.69 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.3 mm (official 52.6)
+vp11/run2_2018-05-24-14-35-56 rot 10 seed 1: rot err F 3.65 R 4.91 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp11/run1_2018-05-24-13-44-01 rot 10 seed 1: rot err F 4.39 R 3.98 deg | centre F 36 R 44 mm | baseline +1.1% | body14 49.2 mm (official 31.5)
+vp13/run2_2018-05-30-11-34-54 rot 10 seed 1: rot err F 5.64 R 4.55 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.4 mm (official 37.0)
+vp5/run2b_2018-05-22-15-50-07 rot 10 seed 1: rot err F 5.54 R 5.78 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp13/run1_2018-05-29-15-21-10 rot 10 seed 2: rot err F 4.37 R 5.43 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.2 mm (official 42.2)
+vp5/run1_2018-05-22-15-10-41 rot 10 seed 2: rot err F 4.11 R 3.69 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.2 mm (official 52.6)
+vp11/run2_2018-05-24-14-35-56 rot 10 seed 2: rot err F 3.65 R 4.91 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp11/run1_2018-05-24-13-44-01 rot 10 seed 2: rot err F 4.39 R 3.98 deg | centre F 36 R 43 mm | baseline +1.1% | body14 49.2 mm (official 31.5)
+vp5/run2b_2018-05-22-15-50-07 rot 10 seed 2: rot err F 5.53 R 5.78 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp13/run2_2018-05-30-11-34-54 rot 10 seed 2: rot err F 5.64 R 4.56 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.5 mm (official 37.0)
+vp13/run1_2018-05-29-15-21-10 rot 20 seed 0: rot err F 4.37 R 5.44 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.3 mm (official 42.2)
+vp5/run1_2018-05-22-15-10-41 rot 20 seed 0: rot err F 4.11 R 3.70 deg | centre F 29 R 41 mm | baseline -2.9% | body14 48.4 mm (official 52.6)
+vp11/run2_2018-05-24-14-35-56 rot 20 seed 0: rot err F 3.65 R 4.91 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp11/run1_2018-05-24-13-44-01 rot 20 seed 0: rot err F 4.39 R 3.97 deg | centre F 36 R 43 mm | baseline +1.1% | body14 49.1 mm (official 31.5)
+vp5/run2b_2018-05-22-15-50-07 rot 20 seed 0: rot err F 5.54 R 5.79 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp13/run2_2018-05-30-11-34-54 rot 20 seed 0: rot err F 5.65 R 4.56 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.5 mm (official 37.0)
+vp13/run1_2018-05-29-15-21-10 rot 20 seed 1: rot err F 4.37 R 5.44 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.2 mm (official 42.2)
+vp5/run1_2018-05-22-15-10-41 rot 20 seed 1: rot err F 4.12 R 3.70 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.3 mm (official 52.6)
+vp11/run1_2018-05-24-13-44-01 rot 20 seed 1: rot err F 4.39 R 3.98 deg | centre F 36 R 44 mm | baseline +1.1% | body14 49.2 mm (official 31.5)
+vp11/run2_2018-05-24-14-35-56 rot 20 seed 1: rot err F 3.65 R 4.90 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp5/run2b_2018-05-22-15-50-07 rot 20 seed 1: rot err F 5.53 R 5.78 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.3 mm (official 37.9)
+vp13/run2_2018-05-30-11-34-54 rot 20 seed 1: rot err F 5.65 R 4.56 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.4 mm (official 37.0)
+vp13/run1_2018-05-29-15-21-10 rot 20 seed 2: rot err F 4.38 R 5.45 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.3 mm (official 42.2)
+vp5/run1_2018-05-22-15-10-41 rot 20 seed 2: rot err F 4.11 R 3.70 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.2 mm (official 52.6)
+vp11/run1_2018-05-24-13-44-01 rot 20 seed 2: rot err F 4.39 R 3.97 deg | centre F 36 R 43 mm | baseline +1.1% | body14 49.1 mm (official 31.5)
+vp11/run2_2018-05-24-14-35-56 rot 20 seed 2: rot err F 3.65 R 4.91 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp5/run2b_2018-05-22-15-50-07 rot 20 seed 2: rot err F 5.54 R 5.78 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp13/run2_2018-05-30-11-34-54 rot 20 seed 2: rot err F 5.64 R 4.56 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.5 mm (official 37.0)
+vp13/run1_2018-05-29-15-21-10 rot 30 seed 0: rot err F 4.38 R 5.45 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.2 mm (official 42.2)
+vp5/run1_2018-05-22-15-10-41 rot 30 seed 0: rot err F 4.11 R 3.69 deg | centre F 29 R 41 mm | baseline -2.9% | body14 48.3 mm (official 52.6)
+vp11/run1_2018-05-24-13-44-01 rot 30 seed 0: rot err F 4.39 R 3.98 deg | centre F 36 R 44 mm | baseline +1.1% | body14 49.2 mm (official 31.5)
+vp11/run2_2018-05-24-14-35-56 rot 30 seed 0: rot err F 3.65 R 4.92 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp5/run2b_2018-05-22-15-50-07 rot 30 seed 0: rot err F 5.54 R 5.79 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp13/run2_2018-05-30-11-34-54 rot 30 seed 0: rot err F 5.65 R 4.56 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.4 mm (official 37.0)
+vp13/run1_2018-05-29-15-21-10 rot 30 seed 1: rot err F 4.36 R 5.43 deg | centre F 68 R 130 mm | baseline +12.3% | body14 81.3 mm (official 42.2)
+vp5/run1_2018-05-22-15-10-41 rot 30 seed 1: rot err F 4.11 R 3.69 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.2 mm (official 52.6)
+vp11/run1_2018-05-24-13-44-01 rot 30 seed 1: rot err F 4.39 R 3.99 deg | centre F 36 R 44 mm | baseline +1.0% | body14 49.2 mm (official 31.5)
+vp11/run2_2018-05-24-14-35-56 rot 30 seed 1: rot err F 3.65 R 4.90 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.6 mm (official 28.7)
+vp5/run2b_2018-05-22-15-50-07 rot 30 seed 1: rot err F 5.54 R 5.78 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp13/run2_2018-05-30-11-34-54 rot 30 seed 1: rot err F 5.64 R 4.56 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.5 mm (official 37.0)
+vp5/run1_2018-05-22-15-10-41 rot 30 seed 2: rot err F 4.12 R 3.70 deg | centre F 29 R 40 mm | baseline -2.7% | body14 48.2 mm (official 52.6)
+vp11/run1_2018-05-24-13-44-01 rot 30 seed 2: rot err F 4.39 R 3.98 deg | centre F 36 R 43 mm | baseline +1.1% | body14 49.2 mm (official 31.5)
+vp13/run1_2018-05-29-15-21-10 rot 30 seed 2: rot err F 4.37 R 5.44 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.2 mm (official 42.2)
+vp5/run2b_2018-05-22-15-50-07 rot 30 seed 2: rot err F 5.54 R 5.79 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp11/run2_2018-05-24-14-35-56 rot 30 seed 2: rot err F 3.65 R 4.91 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp13/run2_2018-05-30-11-34-54 rot 30 seed 2: rot err F 5.64 R 4.56 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.5 mm (official 37.0)
+vp11/run1_2018-05-24-13-44-01 rot 45 seed 0: rot err F 4.38 R 3.97 deg | centre F 36 R 43 mm | baseline +1.1% | body14 49.2 mm (official 31.5)
+vp5/run1_2018-05-22-15-10-41 rot 45 seed 0: rot err F 4.11 R 3.70 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.3 mm (official 52.6)
+vp11/run2_2018-05-24-14-35-56 rot 45 seed 0: rot err F 8.73 R 7.26 deg | centre F 63 R 87 mm | baseline +6.5% | body14 67.1 mm (official 28.7)
+vp5/run2b_2018-05-22-15-50-07 rot 45 seed 0: rot err F 5.54 R 5.80 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp13/run1_2018-05-29-15-21-10 rot 45 seed 0: rot err F 4.38 R 5.45 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.3 mm (official 42.2)
+vp13/run2_2018-05-30-11-34-54 rot 45 seed 0: rot err F 5.64 R 4.55 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.4 mm (official 37.0)
+vp5/run1_2018-05-22-15-10-41 rot 45 seed 1: rot err F 4.11 R 3.69 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.3 mm (official 52.6)
+vp11/run1_2018-05-24-13-44-01 rot 45 seed 1: rot err F 4.39 R 3.99 deg | centre F 36 R 44 mm | baseline +1.0% | body14 49.2 mm (official 31.5)
+vp13/run1_2018-05-29-15-21-10 rot 45 seed 1: rot err F 4.36 R 5.43 deg | centre F 68 R 130 mm | baseline +12.3% | body14 81.3 mm (official 42.2)
+vp5/run2b_2018-05-22-15-50-07 rot 45 seed 1: rot err F 5.54 R 5.78 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp11/run2_2018-05-24-14-35-56 rot 45 seed 1: rot err F 3.65 R 4.91 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp13/run2_2018-05-30-11-34-54 rot 45 seed 1: rot err F 5.64 R 4.56 deg | centre F 89 R 117 mm | baseline +11.3% | body14 81.4 mm (official 37.0)
+vp5/run1_2018-05-22-15-10-41 rot 45 seed 2: rot err F 4.11 R 3.70 deg | centre F 29 R 40 mm | baseline -2.8% | body14 48.2 mm (official 52.6)
+vp13/run1_2018-05-29-15-21-10 rot 45 seed 2: rot err F 4.38 R 5.45 deg | centre F 69 R 131 mm | baseline +12.5% | body14 82.2 mm (official 42.2)
+vp11/run1_2018-05-24-13-44-01 rot 45 seed 2: rot err F 4.39 R 3.99 deg | centre F 36 R 44 mm | baseline +1.0% | body14 49.2 mm (official 31.5)
+vp5/run2b_2018-05-22-15-50-07 rot 45 seed 2: rot err F 5.54 R 5.79 deg | centre F 28 R 117 mm | baseline +6.1% | body14 70.4 mm (official 37.9)
+vp11/run2_2018-05-24-14-35-56 rot 45 seed 2: rot err F 3.65 R 4.92 deg | centre F 23 R 60 mm | baseline -2.5% | body14 39.7 mm (official 28.7)
+vp13/run2_2018-05-30-11-34-54 rot 45 seed 2: rot err F 5.65 R 4.55 deg | centre F 89 R 116 mm | baseline +11.3% | body14 80.9 mm (official 37.0)
+
+==== summary: body14 MPJPE / PA-MPJPE (mm), mean over runs (trials pooled) ====
+official, three-view DLT                     abs   32.3 /  29.3 | body-centred   48.8 /  29.3
+official, best_subset (in-house rule)        abs   38.3 /  33.0 | body-centred   55.1 /  33.0
+official + shoulder anchor, three-view DLT   abs   56.0 /  29.3 | body-centred   55.6 /  29.3
+official + shoulder anchor, best_subset      abs   60.5 /  33.0 | body-centred   62.7 /  33.0
+official: coverage 1.000, two-view share 1.000, holdout reprojection 4.84 px; anchor scale x1.062 (0.981-1.136)
+
+start 0 deg / 0 cm (6 trials; start rotation error median 0.0 deg, start holdout reprojection 4.8 px, valid 1.00)
+   calibrated rig: rotation error median 4.47 max 5.78 deg | centre error median 52 max 131 mm | baseline +3.6% (-2.8..+12.5) | holdout reprojection 4.14 px
+   self-calibrated + anchor, best_subset     abs   61.9 /  33.0 | body-centred   63.3 /  33.0
+   self-calibrated + anchor, three-view DLT  abs   59.9 /  31.1 | body-centred   59.3 /  31.1
+   self-calibrated, oracle scale, best_subset abs   47.8 /  33.0 | body-centred   56.9 /  33.0
+
+start 10 deg / 5 cm (18 trials; start rotation error median 10.0 deg, start holdout reprojection 20.4 px, valid 0.99)
+   calibrated rig: rotation error median 4.47 max 5.78 deg | centre error median 52 max 131 mm | baseline +3.6% (-2.8..+12.5) | holdout reprojection 4.14 px
+   self-calibrated + anchor, best_subset     abs   61.9 /  33.0 | body-centred   63.3 /  33.0
+   self-calibrated + anchor, three-view DLT  abs   59.9 /  31.1 | body-centred   59.3 /  31.1
+   self-calibrated, oracle scale, best_subset abs   47.8 /  33.0 | body-centred   56.9 /  33.0
+
+start 20 deg / 10 cm (18 trials; start rotation error median 20.0 deg, start holdout reprojection 37.8 px, valid 0.87)
+   calibrated rig: rotation error median 4.47 max 5.79 deg | centre error median 52 max 131 mm | baseline +3.6% (-2.9..+12.5) | holdout reprojection 4.14 px
+   self-calibrated + anchor, best_subset     abs   61.9 /  33.0 | body-centred   63.3 /  33.0
+   self-calibrated + anchor, three-view DLT  abs   59.9 /  31.1 | body-centred   59.3 /  31.1
+   self-calibrated, oracle scale, best_subset abs   47.8 /  33.0 | body-centred   56.9 /  33.0
+
+start 30 deg / 15 cm (18 trials; start rotation error median 30.0 deg, start holdout reprojection 42.0 px, valid 0.70)
+   calibrated rig: rotation error median 4.47 max 5.79 deg | centre error median 52 max 131 mm | baseline +3.6% (-2.9..+12.5) | holdout reprojection 4.14 px
+   self-calibrated + anchor, best_subset     abs   61.8 /  33.0 | body-centred   63.3 /  33.0
+   self-calibrated + anchor, three-view DLT  abs   59.9 /  31.1 | body-centred   59.3 /  31.1
+   self-calibrated, oracle scale, best_subset abs   47.8 /  33.0 | body-centred   56.9 /  33.0
+   start (uncalibrated), best_subset         abs 5555.3 / 121.6 | body-centred 14289.1 / 133.0
+
+start 45 deg / 20 cm (18 trials; start rotation error median 45.0 deg, start holdout reprojection 47.4 px, valid 0.51)
+   calibrated rig: rotation error median 4.55 max 8.73 deg | centre error median 60 max 131 mm | baseline +6.1% (-2.8..+12.5) | holdout reprojection 4.30 px
+   self-calibrated + anchor, best_subset     abs   63.3 /  33.3 | body-centred   64.0 /  33.3
+   self-calibrated + anchor, three-view DLT  abs   61.1 /  31.2 | body-centred   60.1 /  31.2
+   self-calibrated, oracle scale, best_subset abs   47.9 /  33.3 | body-centred   57.0 /  33.3
+   start (uncalibrated), best_subset         abs 2219.3 / 100.8 | body-centred 3450.9 / 132.8
+
+per run (start 0 deg): rotation F/R deg, centre F/R mm, baseline %, anchor scale, abs / body-centred MPJPE (best_subset) vs official
+   vp11/run1_2018-05-24-13-44-01     4.4/ 4.0    36/  44   +1.1  x1.010   49.2/ 55.6  vs  31.5/ 48.9
+   vp11/run2_2018-05-24-14-35-56     3.6/ 4.9    23/  60   -2.5  x0.975   39.7/ 49.6  vs  28.7/ 48.3
+   vp13/run1_2018-05-29-15-21-10     4.4/ 5.4    69/ 131  +12.5  x1.125   82.2/ 80.3  vs  42.2/ 61.8
+   vp13/run2_2018-05-30-11-34-54     5.6/ 4.6    89/ 117  +11.3  x1.113   81.5/ 74.0  vs  37.0/ 52.0
+   vp5/run1_2018-05-22-15-10-41      4.1/ 3.7    29/  40   -2.8  x0.972   48.3/ 57.8  vs  52.6/ 67.9
+   vp5/run2b_2018-05-22-15-50-07     5.5/ 5.8    28/ 117   +6.1  x1.061   70.4/ 62.3  vs  37.9/ 52.0
+saved -> eval/logs/driveandact_selfcalib/result.json

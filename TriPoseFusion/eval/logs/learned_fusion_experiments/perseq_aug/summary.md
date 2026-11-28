@@ -1,53 +1,53 @@
 folds: [0, 1, 2, 3, 4]
 
-| method | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |
+| method | MPJPE (mm) | PA-MPJPE (mm) | PCK@100mm |
 |---|---|---|---|
-| single_front | 0.1723 ± 0.0249 | 0.0588 ± 0.0106 | 0.4586 ± 0.0620 |
-| single_left | 0.1606 ± 0.0288 | 0.0457 ± 0.0106 | 0.4730 ± 0.0603 |
-| single_right | 0.1524 ± 0.0253 | 0.0454 ± 0.0102 | 0.4774 ± 0.0600 |
-| fuse_mean | 0.1486 ± 0.0256 | 0.0440 ± 0.0092 | 0.4972 ± 0.0546 |
-| fuse_median | 0.1515 ± 0.0241 | 0.0458 ± 0.0101 | 0.4848 ± 0.0579 |
-| best_single_oracle | 0.1447 ± 0.0216 | 0.0462 ± 0.0117 | 0.4884 ± 0.0607 |
-| learned (fixed steps) | 0.1492 ± 0.0255 | 0.0444 ± 0.0086 | 0.5034 ± 0.0612 |
+| single_front | 172.3 ± 24.9 | 58.8 ± 10.6 | 0.4586 ± 0.0620 |
+| single_left | 160.6 ± 28.8 | 45.7 ± 10.6 | 0.4730 ± 0.0603 |
+| single_right | 152.4 ± 25.3 | 45.4 ± 10.2 | 0.4774 ± 0.0600 |
+| fuse_mean | 148.6 ± 25.6 | 44.0 ± 9.2 | 0.4972 ± 0.0546 |
+| fuse_median | 151.5 ± 24.1 | 45.8 ± 10.1 | 0.4848 ± 0.0579 |
+| best_single_oracle | 144.7 ± 21.6 | 46.2 ± 11.7 | 0.4884 ± 0.0607 |
+| learned (fixed steps) | 149.2 ± 25.5 | 44.4 ± 8.6 | 0.5034 ± 0.0612 |
 
-| method | head | shoulders/neck | body | hands |
+| method (group MPJPE, mm) | head | shoulders/neck | body | hands |
 |---|---|---|---|---|
-| single_front | 0.0827 | 0.0218 | 0.0523 | 0.2828 |
-| single_left | 0.0801 | 0.0214 | 0.0508 | 0.2502 |
-| single_right | 0.0782 | 0.0211 | 0.0496 | 0.2408 |
-| fuse_mean | 0.0782 | 0.0207 | 0.0494 | 0.2320 |
-| fuse_median | 0.0784 | 0.0208 | 0.0496 | 0.2383 |
-| best_single_oracle | 0.0780 | 0.0214 | 0.0497 | 0.2359 |
-| learned (fixed steps) | 0.0821 | 0.0510 | 0.0665 | 0.2186 |
+| single_front | 82.7 | 21.8 | 52.3 | 282.8 |
+| single_left | 80.1 | 21.4 | 50.8 | 250.2 |
+| single_right | 78.2 | 21.1 | 49.6 | 240.8 |
+| fuse_mean | 78.2 | 20.7 | 49.4 | 232.0 |
+| fuse_median | 78.4 | 20.8 | 49.6 | 238.3 |
+| best_single_oracle | 78.0 | 21.4 | 49.7 | 235.9 |
+| learned (fixed steps) | 82.1 | 51.0 | 66.5 | 218.6 |
 
 learned mean view weights (front/left/right): [0.318, 0.335, 0.347] ± [0.009, 0.007, 0.011]
 
 ### view corruption: drop (mean over 5 folds)
 
-| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |
+| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |
 |---|---|---|---|---|---|
-| clean | 0.1492 | 0.0444 | nan | 0.1486 | nan |
-| front | 0.1484 | 0.0411 | 0.000 | 0.1479 | 0.1479 |
-| left | 0.1539 | 0.0498 | 0.000 | 0.1531 | 0.1531 |
-| right | 0.1553 | 0.0479 | 0.000 | 0.1551 | 0.1551 |
+| clean | 149.2 | 44.4 | nan | 148.6 | nan |
+| front | 148.4 | 41.1 | 0.000 | 147.9 | 147.9 |
+| left | 153.9 | 49.8 | 0.000 | 153.1 | 153.1 |
+| right | 155.3 | 47.9 | 0.000 | 155.1 | 155.1 |
 
 ### view corruption: zero (mean over 5 folds)
 
-| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |
+| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |
 |---|---|---|---|---|---|
-| clean | 0.1492 | 0.0444 | nan | 0.1486 | nan |
-| front | 0.1508 | 0.0451 | 0.038 | 0.1751 | 0.1479 |
-| left | 0.1552 | 0.0511 | 0.036 | 0.1769 | 0.1531 |
-| right | 0.1572 | 0.0513 | 0.038 | 0.1770 | 0.1551 |
+| clean | 149.2 | 44.4 | nan | 148.6 | nan |
+| front | 150.8 | 45.1 | 0.038 | 175.1 | 147.9 |
+| left | 155.2 | 51.1 | 0.036 | 176.9 | 153.1 |
+| right | 157.2 | 51.3 | 0.038 | 177.0 | 155.1 |
 
 ### view corruption: noise (mean over 5 folds)
 
-| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |
+| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |
 |---|---|---|---|---|---|
-| clean | 0.1492 | 0.0444 | nan | 0.1486 | nan |
-| front | 0.1502 | 0.0527 | 0.223 | 0.1668 | 0.1479 |
-| left | 0.1521 | 0.0554 | 0.239 | 0.1668 | 0.1531 |
-| right | 0.1530 | 0.0571 | 0.253 | 0.1668 | 0.1551 |
+| clean | 149.2 | 44.4 | nan | 148.6 | nan |
+| front | 150.2 | 52.7 | 0.223 | 166.8 | 147.9 |
+| left | 152.1 | 55.4 | 0.239 | 166.8 | 153.1 |
+| right | 153.0 | 57.1 | 0.253 | 166.8 | 155.1 |
 
 ### Drive&Act zero-shot (hs10, pooled PA-MPJPE mm)
 

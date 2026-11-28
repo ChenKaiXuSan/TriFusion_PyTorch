@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 """Direction agreement between keypoint head-yaw and human left/right glance events.
 
-Human glance annotations are small-amplitude (median accompanying head turn ~8 deg) and
-are NOT a head-turn ground truth; but their *direction* is unambiguous.  For every
+Human glance annotations are NOT a head-turn ground truth (about half of the left/right
+glances come with a head rotation of at least 15 deg; the rest are mostly eye movement),
+but their *direction* is unambiguous.  Annotation frame numbers are 24 fps and must be
+rescaled to the 29.97 fps video (run_head_movement_analysis.py does this).  For every
 majority-vote left/right glance event we test whether the keypoint yaw deviates from the
 driver's resting yaw in the labelled direction:
 
@@ -23,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-SOURCES = ["fused_v3", "fused_full", "fused_mean", "fused_median", "view_front", "view_left", "view_right"]
+SOURCES = ["fused_main", "fused_mean", "fused_median", "view_front", "view_left", "view_right"]
 
 
 def runs(mask: np.ndarray):

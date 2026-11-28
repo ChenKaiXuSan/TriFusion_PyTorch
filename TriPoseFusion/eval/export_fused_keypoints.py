@@ -19,15 +19,19 @@ in ``--out-dir`` the fields
 and writes ``<suffix>_export_manifest.json`` with per-sequence MPJPE/PA against the v3
 reference next to the numbers in the training ``result.json`` (checkpoint/config guard).
 
-Example (paper's full model, 5-fold SetFusion + corruption augmentation):
+Existing fields of the output files are kept; each file is rewritten atomically (temporary
+file + rename), so an interrupted run cannot corrupt a downstream file.
+
+Example (paper's main model: 5-fold SetFusion, 27.9K, equal-budget training 6000 x 32 x 64):
   python TriPoseFusion/eval/export_fused_keypoints.py \
-      --model-root TriPoseFusion/eval/logs/learned_fusion_experiments/perseq_setfusion \
-      --suffix full
+      --model-root TriPoseFusion/eval/logs/learned_fusion_experiments/eqb_setfusion \
+      --suffix main
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -48,6 +52,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--out-dir", type=Path, default=D / "downstream_analysis/fused_keypoints")
     ap.add_argument("--folds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--device", default="auto", help="auto (cuda if available) | cpu | cuda")
+    ap.add_argument("--sequences", nargs="*", default=None, help="subset of <person>_<env> names (debug)")
     return ap.parse_args()
 
 
@@ -57,7 +63,11 @@ def val_subjects(index_mapping: Path, fold: int) -> set[str]:
 
 
 def build_from_config(cfg: dict):
-    from learned_fusion_experiments import LearnedFusion, ResidualFusion, SetFusion  # noqa: E402
+    from learned_fusion_experiments import LearnedFusion, ResidualFusion, SetFusion, SetResidualFusion  # noqa: E402
+    if cfg.get("model") == "setres":
+        return SetResidualFusion(d=cfg["hidden"] if cfg["hidden"] >= 16 else 32, view_layers=cfg["view_layers"],
+                                 residual_hidden=cfg.get("residual_hidden", 0) or 64, temporal=cfg["temporal"],
+                                 uncertainty=not cfg.get("no_uncertainty", False))
     if cfg.get("model") == "setfusion":
         return SetFusion(d=cfg["hidden"] if cfg["hidden"] >= 16 else 64, temporal=cfg["temporal"],
                          view_layers=cfg["view_layers"], joint_layers=cfg["joint_layers"],
@@ -81,16 +91,20 @@ def main() -> None:
           f"aug={cfg.get('augment_prob')} steps={cfg.get('steps')}", flush=True)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     sfx = args.suffix
+    dev = torch.device(("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device)
+    print(f"device: {dev}", flush=True)
 
     manifest = []
     for fold in args.folds:
         model = build_from_config(cfg)
         model.load_state_dict(torch.load(args.model_root / f"fold{fold}" / "model.pt", map_location="cpu"))
-        model.eval()
+        model.to(dev).eval()
         ref = {(r["person"], r["env"]): r["metrics"] for r in json.load(
             open(args.model_root / f"fold{fold}" / "result.json", encoding="utf-8"))["per_sequence_learned"]}
         subs = val_subjects(args.index_mapping, fold)
         files = sorted(p for p in args.cache_dir.glob("*.npz") if p.stem[:2] in subs)
+        if args.sequences:
+            files = [p for p in files if p.stem in set(args.sequences)]
         print(f"[fold {fold}] val subjects {sorted(subs)} -> {len(files)} sequences", flush=True)
         for p in files:
             with np.load(p, allow_pickle=False) as z:
@@ -98,11 +112,11 @@ def main() -> None:
                 vc = z["view_conf"].astype(np.float32)
                 gt, gv = z["gt_pose"].astype(np.float32), z["gt_valid"].astype(bool)
             with torch.no_grad():
-                pred, w = model(torch.from_numpy(vp)[None], torch.from_numpy(vc)[None])
+                pred, w = model(torch.from_numpy(vp)[None].to(dev), torch.from_numpy(vc)[None].to(dev))
                 ls = getattr(model, "last_logscale", None)
-                unc = torch.exp(ls.clamp(-6, 3))[0].numpy().astype(np.float32) if ls is not None else None
-            pred = pred[0].numpy().astype(np.float32)
-            gate = w[0].numpy().astype(np.float32)
+                unc = torch.exp(ls.clamp(-6, 3))[0].float().cpu().numpy().astype(np.float32) if ls is not None else None
+            pred = pred[0].float().cpu().numpy().astype(np.float32)
+            gate = w[0].float().cpu().numpy().astype(np.float32)
             m = compute_metrics(pred=pred, gt=gt, valid_mask=gv, pck_thresholds=(0.05, 0.10)) or {}
             person, env = p.stem[:2], p.stem[3:]
             r = ref.get((person, env), {})
@@ -124,13 +138,15 @@ def main() -> None:
             payload[f"fold_{sfx}"] = np.int64(fold)
             if unc is not None:
                 payload[f"uncertainty_{sfx}"] = unc
-            np.savez_compressed(out_path, **payload)
-            print(f"  {p.stem}: T={pred.shape[0]} mpjpe={row['mpjpe_m']:.4f} "
-                  f"(train-log ref {r.get('mpjpe_m', float('nan')):.4f})", flush=True)
+            tmp_path = out_path.with_name(out_path.stem + ".tmp.npz")
+            np.savez_compressed(tmp_path, **payload)
+            os.replace(tmp_path, out_path)  # atomic: an interrupted run leaves the old file intact
+            print(f"  {p.stem}: T={pred.shape[0]} mpjpe={1000*row['mpjpe_m']:.1f} mm "
+                  f"(train-log ref {1000*r.get('mpjpe_m', float('nan')):.1f} mm)", flush=True)
     json.dump(manifest, open(args.out_dir / f"{sfx}_export_manifest.json", "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)
     mp = np.array([r["mpjpe_m"] for r in manifest if r["mpjpe_m"] is not None])
-    print(f"done: {len(manifest)} sequences, mean per-sequence MPJPE {mp.mean():.4f} m", flush=True)
+    print(f"done: {len(manifest)} sequences, mean per-sequence MPJPE {1000*mp.mean():.1f} mm", flush=True)
 
 
 if __name__ == "__main__":

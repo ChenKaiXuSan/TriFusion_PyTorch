@@ -1,0 +1,350 @@
+{
+ "fold": 2,
+ "params": 0,
+ "steps": 1500,
+ "train_seconds": 2.7924511432647705,
+ "config": {
+  "cache_dir": "/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache_driveandact",
+  "index_mapping": "/work/1/SKIING/chenkaixu/data/drive/driveandact_index_mapping",
+  "output_dir": "/work/1/SKIING/chenkaixu/code/TriFusion/.claude/worktrees/hybrid-fusion/TriPoseFusion/eval/logs/learned_fusion_experiments",
+  "tag": "daeq_tf_geomedian",
+  "threads": 2,
+  "seed": 42,
+  "pck": [
+   0.02,
+   0.05,
+   0.1,
+   0.15
+  ],
+  "hidden": 32,
+  "joint_emb": 8,
+  "temporal": true,
+  "uniform_weights": false,
+  "residual_hidden": 0,
+  "residual_uncertainty": false,
+  "model": "tf_geomedian",
+  "device": "auto",
+  "refiner_dim": 128,
+  "tripose_velocity": false,
+  "no_cross_view_attention": false,
+  "view_layers": 2,
+  "joint_layers": 1,
+  "no_uncertainty": false,
+  "cmd": "train",
+  "folds": [
+   2
+  ],
+  "augment_prob": 0.5,
+  "train_gt_key": "gt_pose",
+  "steps": 1500,
+  "batch": 32,
+  "window": 64,
+  "lr": 0.001,
+  "eval_every": 250
+ },
+ "learned_last": {
+  "mpjpe_m": 0.02764292247593403,
+  "pa_mpjpe_m": 0.026383545991835847,
+  "mpjpe_pa_frames_m": 0.027642921766662998,
+  "root_mpjpe_m": 0.0292056268081069,
+  "pck": {
+   "0.02": 0.35379566107531246,
+   "0.05": 0.9106813476680174,
+   "0.10": 0.9979744304810467,
+   "0.15": 0.9999311389615755
+  },
+  "num_sequences": 2,
+  "groups": {
+   "head": 0.026242562383413316,
+   "shoulders_neck": 0.028115273918956518,
+   "body": 0.026777622822139944,
+   "hands": 0.039777898229658604
+  }
+ },
+ "uncertainty_calibration": {},
+ "learned_best_val_for_reference": null,
+ "mean_view_weights": {
+  "front": 0.6278334025744331,
+  "left": 0.19528509438385663,
+  "right": 0.1768703258083175
+ },
+ "training_free": {
+  "single_front": {
+   "mpjpe_m": 0.03335612080991268,
+   "pa_mpjpe_m": 0.028370609546427374,
+   "mpjpe_pa_frames_m": 0.03335611924851385,
+   "root_mpjpe_m": 0.0354795902967453,
+   "pck": {
+    "0.02": 0.15769677609021351,
+    "0.05": 0.8925991726254032,
+    "0.10": 0.9896274581732101,
+    "0.15": 0.9991817134388301
+   },
+   "num_sequences": 2,
+   "groups": {
+    "head": 0.031644596718251705,
+    "shoulders_neck": 0.02842856291681528,
+    "body": 0.030725729917841296,
+    "hands": 0.047299071215093136
+   }
+  },
+  "single_left": {
+   "mpjpe_m": 0.04623052664101124,
+   "pa_mpjpe_m": 0.036432220316220544,
+   "mpjpe_pa_frames_m": 0.046230526705477414,
+   "root_mpjpe_m": 0.04963244870305061,
+   "pck": {
+    "0.02": 0.13913778445667396,
+    "0.05": 0.6890863628754357,
+    "0.10": 0.9184921540586104,
+    "0.15": 0.9893557588853752
+   },
+   "num_sequences": 2,
+   "groups": {
+    "head": 0.04063781704753637,
+    "shoulders_neck": 0.030345868784934282,
+    "body": 0.03769726040107863,
+    "hands": 0.0823473185300827
+   }
+  },
+  "single_right": {
+   "mpjpe_m": 0.03715701773762703,
+   "pa_mpjpe_m": 0.02843833919002954,
+   "mpjpe_pa_frames_m": 0.03715701615080014,
+   "root_mpjpe_m": 0.03814532607793808,
+   "pck": {
+    "0.02": 0.31267640851870127,
+    "0.05": 0.7733397813249476,
+    "0.10": 0.9432310172699965,
+    "0.15": 0.9953459845234556
+   },
+   "num_sequences": 2,
+   "groups": {
+    "head": 0.028249950148165226,
+    "shoulders_neck": 0.026053542038425803,
+    "body": 0.027622404973953962,
+    "hands": 0.0798853188753128
+   }
+  },
+  "fuse_mean": {
+   "mpjpe_m": 0.026555483229458332,
+   "pa_mpjpe_m": 0.02610402568653012,
+   "mpjpe_pa_frames_m": 0.026555483594456034,
+   "root_mpjpe_m": 0.028556862846016884,
+   "pck": {
+    "0.02": 0.34510675903152144,
+    "0.05": 0.9555576350478472,
+    "0.10": 0.9991025917151267,
+    "0.15": 1.0
+   },
+   "num_sequences": 2,
+   "groups": {
+    "head": 0.026794675178825854,
+    "shoulders_neck": 0.027505211997777224,
+    "body": 0.026997685698526244,
+    "hands": 0.033883203752338886
+   }
+  },
+  "fuse_median": {
+   "mpjpe_m": 0.027923903428018093,
+   "pa_mpjpe_m": 0.026675512992875277,
+   "mpjpe_pa_frames_m": 0.027923905065827925,
+   "root_mpjpe_m": 0.03041803278028965,
+   "pck": {
+    "0.02": 0.33382224720051873,
+    "0.05": 0.907505597598081,
+    "0.10": 0.9978411058407459,
+    "0.15": 0.9998967084423633
+   },
+   "num_sequences": 2,
+   "groups": {
+    "head": 0.026445401087403297,
+    "shoulders_neck": 0.027598415967077017,
+    "body": 0.026774833910167217,
+    "hands": 0.03928258828818798
+   }
+  },
+  "best_single_oracle": {
+   "mpjpe_m": 0.03335612080991268,
+   "pa_mpjpe_m": 0.028370609546427374,
+   "mpjpe_pa_frames_m": 0.03335611924851385,
+   "root_mpjpe_m": 0.0354795902967453,
+   "pck": {
+    "0.02": 0.15769677609021351,
+    "0.05": 0.8925991726254032,
+    "0.10": 0.9896274581732101,
+    "0.15": 0.9991817134388301
+   },
+   "num_sequences": 2,
+   "groups": {
+    "head": 0.031644596718251705,
+    "shoulders_neck": 0.02842856291681528,
+    "body": 0.030725729917841296,
+    "hands": 0.047299071215093136
+   }
+  }
+ },
+ "history": [],
+ "per_sequence_learned": [
+  {
+   "person": "vp5",
+   "env": "run1_2018-05-22-15-10-41",
+   "metrics": {
+    "num_frames": 1799,
+    "num_keypoints": 52,
+    "num_valid_points": 13929,
+    "mpjpe_m": 0.027941258624196053,
+    "median_error_m": 0.0254104845225811,
+    "root_mpjpe_m": 0.02893436700105667,
+    "pa_mpjpe_m": 0.02648694313861571,
+    "mpjpe_pa_frames_m": 0.027941257387948747,
+    "pck": {
+     "0.02": 0.3181132888218824,
+     "0.05": 0.920453729628832,
+     "0.10": 0.9969129155000359,
+     "0.15": 1.0
+    },
+    "auc_0.15": 0.8036887533319901,
+    "per_axis_mae_m": {
+     "x": 0.013243492692708969,
+     "y": 0.013432804495096207,
+     "z": 0.014793011359870434
+    },
+    "per_joint_mpjpe_m": [
+     0.016670024022459984,
+     0.019953973591327667,
+     0.018800638616085052,
+     0.04257730394601822,
+     0.029851507395505905,
+     0.032684385776519775,
+     0.027046093717217445,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     0.03713509440422058,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     0.039610348641872406,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "person": "vp5",
+   "env": "run2b_2018-05-22-15-50-07",
+   "metrics": {
+    "num_frames": 1800,
+    "num_keypoints": 52,
+    "num_valid_points": 14522,
+    "mpjpe_m": 0.027344586327672005,
+    "median_error_m": 0.023100007325410843,
+    "root_mpjpe_m": 0.029476886615157127,
+    "pa_mpjpe_m": 0.026280148845055983,
+    "mpjpe_pa_frames_m": 0.02734458614537725,
+    "pck": {
+     "0.02": 0.3894780333287426,
+     "0.05": 0.9009089657072029,
+     "0.10": 0.9990359454620575,
+     "0.15": 0.9998622779231511
+    },
+    "auc_0.15": 0.8075134056892546,
+    "per_axis_mae_m": {
+     "x": 0.012234173715114594,
+     "y": 0.013600712642073631,
+     "z": 0.01429859921336174
+    },
+    "per_joint_mpjpe_m": [
+     0.01765492931008339,
+     0.02127026580274105,
+     0.013555211946368217,
+     0.05392368137836456,
+     0.0281680878251791,
+     0.0332341194152832,
+     0.01949649676680565,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     0.05042237043380737,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     0.031943779438734055,
+     null,
+     null,
+     null
+    ]
+   }
+  }
+ ]
+}

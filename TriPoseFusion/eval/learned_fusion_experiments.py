@@ -42,8 +42,11 @@ for p in (str(SCRIPT_DIR), str(REPO_ROOT)):
 from eval_fusion_baselines_pesudo_gt import canonicalize_pose, compute_metrics, fuse_views  # noqa: E402
 from learned_fusion_baseline import LearnedFusion, load_fold_pairs, masked_loss, summarize  # noqa: E402
 from learned_fusion_baseline import SeqStore as _BaseSeqStore  # noqa: E402
+from fusion_baselines import BASELINES  # noqa: E402
 
 VIEWS = ("front", "left", "right")
+DEVICE = torch.device("cpu")  # set from --device in main()
+MM = 1000.0  # errors are stored in metres (`*_m` JSON fields) and always reported in millimetres
 
 
 class _Seq(dict):
@@ -108,6 +111,8 @@ class SeqStore(_BaseSeqStore):
 DEFAULT_CACHE = Path("/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache_perseq")  # v3 参考；v1 缓存已移至 _legacy/
 DEFAULT_INDEX = Path("/work/1/SKIING/chenkaixu/data/drive/index_mapping")
 DEFAULT_DA_ROOT = Path("/work/1/SKIING/chenkaixu/data/drive/driveandact/tripose_eval_dense")
+DEFAULT_DA_CACHE = Path("/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache_driveandact")  # crosseval target
+DEFAULT_DA_INDEX = Path("/work/1/SKIING/chenkaixu/data/drive/driveandact_index_mapping")
 DEFAULT_OUT = SCRIPT_DIR / "logs" / "learned_fusion_experiments"
 
 
@@ -178,9 +183,10 @@ def learned_rows(model: LearnedFusion, store: SeqStore, pck, corrupt=None) -> tu
     with torch.no_grad():
         for s in store.seqs:
             vp = s["view_pose"] if corrupt is None else corrupt(s["view_pose"])
-            pred, w = model(torch.from_numpy(vp).unsqueeze(0), torch.from_numpy(s["view_conf"]).unsqueeze(0))
-            pred = pred.squeeze(0).numpy()
-            w = w.squeeze(0).numpy()  # (T,J,V)
+            pred, w = model(torch.from_numpy(vp).unsqueeze(0).to(DEVICE),
+                            torch.from_numpy(s["view_conf"]).unsqueeze(0).to(DEVICE))
+            pred = pred.squeeze(0).float().cpu().numpy()
+            w = w.squeeze(0).float().cpu().numpy()  # (T,J,V)
             finite_any = np.isfinite(vp).all(-1).any(-1)  # (T,J)
             wsum += w[finite_any].sum(axis=0)
             wn += int(finite_any.sum())
@@ -297,6 +303,83 @@ class SetFusion(torch.nn.Module):
         return pred, weights.reshape(b, t, j, v)
 
 
+class SetResidualFusion(SetFusion):
+    """Hybrid of SetFusion's set-attention gate and ResidualFusion's raw-coordinate corrector.
+
+    Gating is SetFusion's: a masked transformer across the view set gives per-view weights
+    (any subset of views; corrupted views are down-weighted). The corrector no longer reads
+    only the attention-pooled token: every finite view contributes
+    phi([canonical xyz, xyz - fused, |xyz - fused|]) and these per-view features are pooled
+    twice over the view set, with the gate weights and with a plain masked mean (so a
+    down-weighted view stays visible to the corrector). That keeps the head permutation-
+    invariant in the views while handing it the raw coordinates that make ResidualFusion
+    accurate. No joint attention and no feature-level temporal conv (both ablated to
+    <=0.3%); a zero-initialised depthwise conv smooths the fused coordinates instead.
+    """
+
+    def __init__(self, d: int = 32, heads: int = 4, view_layers: int = 2, residual_hidden: int = 64,
+                 num_joints: int = 52, num_views: int = 3, temporal: bool = True, kernel: int = 5,
+                 uncertainty: bool = True) -> None:
+        super().__init__(d=d, heads=heads, view_layers=view_layers, joint_layers=0, num_joints=num_joints,
+                         num_views=num_views, temporal=False, kernel=kernel, uncertainty=uncertainty)
+        gelu = torch.nn.GELU
+        self.phi = torch.nn.Sequential(torch.nn.Linear(7, d), gelu(), torch.nn.Linear(d, d), gelu())
+        self.head = torch.nn.Sequential(
+            torch.nn.Linear(3 + 3 * d, residual_hidden), gelu(),
+            torch.nn.Linear(residual_hidden, residual_hidden), gelu(),
+            torch.nn.Linear(residual_hidden, 4 if uncertainty else 3),
+        )
+        torch.nn.init.zeros_(self.head[-1].weight)
+        torch.nn.init.zeros_(self.head[-1].bias)
+        if uncertainty:
+            with torch.no_grad():
+                self.head[-1].bias[3] = -3.0  # initial scale ~0.05 m
+        self.coord_temporal = temporal
+        if temporal:
+            self.ctconv = torch.nn.Conv1d(3, 3, kernel, padding=kernel // 2, groups=3)
+            torch.nn.init.zeros_(self.ctconv.weight)
+            torch.nn.init.zeros_(self.ctconv.bias)
+
+    def forward(self, view_pose: torch.Tensor, view_conf: torch.Tensor):
+        b, t, j, v, _ = view_pose.shape
+        n = b * t * j
+        finite = torch.isfinite(view_pose).all(dim=-1)  # (B,T,J,V)
+        pose = torch.nan_to_num(view_pose, nan=0.0)
+        n_finite = finite.sum(dim=-1, keepdim=True).clamp_min(1)
+        mean_pose = (pose * finite.unsqueeze(-1)).sum(dim=-2) / n_finite
+        disagreement = torch.linalg.norm(pose - mean_pose.unsqueeze(-2), dim=-1) * finite
+        feats = torch.cat([pose, disagreement.unsqueeze(-1), finite.float().unsqueeze(-1)], dim=-1)
+        x = self.in_proj(feats) + self.view_emb.weight[:v][None, None, None] + self.joint_emb.weight[None, None, :, None]
+        x = x.reshape(n, v, self.d)
+        any_finite = finite.any(dim=-1)  # (B,T,J)
+        fin = finite.reshape(n, v)
+        pad = (~fin) & any_finite.reshape(-1, 1)  # rows with no finite view stay unmasked (avoid NaN)
+        for layer in self.view_layers:
+            x = layer(x, src_key_padding_mask=pad)
+        logits = self.gate(x).squeeze(-1).masked_fill(pad, -1e4)
+        weights = torch.softmax(logits, dim=-1)  # (N,V)
+        pose_n = pose.reshape(n, v, 3)
+        fused = (pose_n * weights.unsqueeze(-1)).sum(dim=1)  # (N,3)
+        pooled = (x * weights.unsqueeze(-1)).sum(dim=1)  # (N,d)
+
+        rel = pose_n - fused.unsqueeze(1)
+        raw = torch.cat([pose_n, rel, torch.linalg.norm(rel, dim=-1, keepdim=True)], dim=-1)  # (N,V,7)
+        ph = self.phi(raw)  # (N,V,d)
+        finf = fin.unsqueeze(-1).to(ph.dtype)
+        gate_pool = (ph * weights.unsqueeze(-1)).sum(dim=1)
+        mean_pool = (ph * finf).sum(dim=1) / finf.sum(dim=1).clamp_min(1.0)
+
+        fused_c = fused.reshape(b, t, j, 3)
+        if self.coord_temporal:
+            ft = fused_c.permute(0, 2, 3, 1).reshape(b * j, 3, t)
+            fused_c = fused_c + self.ctconv(ft).reshape(b, j, 3, t).permute(0, 3, 1, 2)
+        out = self.head(torch.cat([fused_c.reshape(n, 3), pooled, gate_pool, mean_pool], dim=-1)).reshape(b, t, j, -1)
+        pred = fused_c + out[..., :3]
+        self.last_logscale = out[..., 3] if self.uncertainty else None
+        pred = torch.where(any_finite.unsqueeze(-1).expand_as(pred), pred, torch.nan)
+        return pred, weights.reshape(b, t, j, v)
+
+
 def masked_laplace_nll(pred, gt, valid, logscale):
     mask = valid & torch.isfinite(gt).all(dim=-1) & torch.isfinite(pred).all(dim=-1)
     if not mask.any():
@@ -314,11 +397,12 @@ def uncertainty_calibration(model, store: SeqStore) -> dict:
     model.eval()
     with torch.no_grad():
         for s in store.seqs:
-            pred, _ = model(torch.from_numpy(s["view_pose"]).unsqueeze(0), torch.from_numpy(s["view_conf"]).unsqueeze(0))
+            pred, _ = model(torch.from_numpy(s["view_pose"]).unsqueeze(0).to(DEVICE),
+                            torch.from_numpy(s["view_conf"]).unsqueeze(0).to(DEVICE))
             ls = model.last_logscale
             if ls is None:
                 return {}
-            pred, ls = pred.squeeze(0).numpy(), ls.squeeze(0).numpy()
+            pred, ls = pred.squeeze(0).float().cpu().numpy(), ls.squeeze(0).float().cpu().numpy()
             gt, valid = s["gt_pose"], s["gt_valid"] & np.isfinite(pred).all(-1) & np.isfinite(s["gt_pose"]).all(-1)
             errs.append(np.linalg.norm(pred - gt, axis=-1)[valid])
             scales.append(ls[valid])
@@ -384,6 +468,8 @@ class _ZeroHead(torch.nn.Module):
 
 
 def build_model(args) -> LearnedFusion:
+    if getattr(args, "model", "learned") in BASELINES:
+        return BASELINES[args.model]()
     if getattr(args, "model", "learned") == "tripose":
         return TriPoseWrapper(hidden=args.hidden, refiner_dim=args.refiner_dim, velocity=args.tripose_velocity,
                               cross_view_attention=not args.no_cross_view_attention, temporal=args.temporal)
@@ -391,6 +477,10 @@ def build_model(args) -> LearnedFusion:
         return SetFusion(d=args.hidden if args.hidden >= 16 else 64, temporal=args.temporal,
                          view_layers=args.view_layers, joint_layers=args.joint_layers,
                          uncertainty=not args.no_uncertainty)
+    if getattr(args, "model", "learned") == "setres":
+        return SetResidualFusion(d=args.hidden if args.hidden >= 16 else 32, view_layers=args.view_layers,
+                                 residual_hidden=getattr(args, "residual_hidden", 0) or 64,
+                                 temporal=args.temporal, uncertainty=not args.no_uncertainty)
     kw = dict(hidden=args.hidden, temporal=args.temporal, joint_emb=args.joint_emb)
     rh = getattr(args, "residual_hidden", 0)
     model = (ResidualFusion(residual_hidden=rh, uncertainty=getattr(args, "residual_uncertainty", False), **kw)
@@ -430,7 +520,7 @@ def fold_dir(args, fold: int) -> Path:
 def load_fold_model(args, fold: int) -> LearnedFusion:
     model = build_model(args)
     model.load_state_dict(torch.load(fold_dir(args, fold) / "model.pt", map_location="cpu"))
-    model.eval()
+    model.to(DEVICE).eval()
     return model
 
 
@@ -446,13 +536,15 @@ def cmd_train(args) -> None:
         val_store = SeqStore(args.cache_dir, val_pairs)  # 验证始终用 gt_pose（官方/主参考）
         print(f"[fold {fold}] train {len(train_store.seqs)} / val {len(val_store.seqs)} sequences", flush=True)
 
-        model = build_model(args)
+        model = build_model(args).to(DEVICE)
         n_params = sum(p.numel() for p in model.parameters())
-        opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+        # training-free baselines have no parameters: `train` only evaluates and stores them
+        opt = torch.optim.Adam(model.parameters(), lr=args.lr) if n_params else None
         history, best = [], None
         t0 = time.time()
-        for step in range(1, args.steps + 1):
+        for step in range(1, (args.steps if n_params else 0) + 1):
             batch = augment_batch(train_store.sample_windows(rng, args.batch, args.window), args.augment_prob, rng)
+            batch = {k: v.to(DEVICE, non_blocking=True) for k, v in batch.items()}
             pred, _ = model(batch["view_pose"], batch["view_conf"])
             if getattr(model, "last_logscale", None) is not None:
                 loss = masked_laplace_nll(pred, batch["gt_pose"], batch["gt_valid"], model.last_logscale)
@@ -465,7 +557,7 @@ def cmd_train(args) -> None:
                 rows, wmean = learned_rows(model, val_store, args.pck)
                 agg = summarize(rows)
                 history.append({"step": step, "loss": float(loss.item()), "mpjpe_m": agg["mpjpe_m"], "pa_mpjpe_m": agg["pa_mpjpe_m"]})
-                print(f"[fold {fold}] step {step} loss {loss.item():.4f} val MPJPE {agg['mpjpe_m']:.4f} PA {agg['pa_mpjpe_m']:.4f} ({time.time()-t0:.0f}s)", flush=True)
+                print(f"[fold {fold}] step {step} loss {loss.item():.4f} val MPJPE {MM*agg['mpjpe_m']:.1f} PA {MM*agg['pa_mpjpe_m']:.1f} mm ({time.time()-t0:.0f}s)", flush=True)
                 if best is None or agg["mpjpe_m"] < best["mpjpe_m"]:
                     best = {"step": step, **agg}
         # fixed-step model (no selection on the evaluation fold)
@@ -489,7 +581,7 @@ def cmd_train(args) -> None:
             "per_sequence_learned": rows,
         }
         (out / "result.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False))
-        print(f"[fold {fold}] learned(last) {agg['mpjpe_m']:.4f}/{agg['pa_mpjpe_m']:.4f} | mean {anchors['fuse_mean']['mpjpe_m']:.4f}/{anchors['fuse_mean']['pa_mpjpe_m']:.4f} | best single {anchors['best_single_oracle']['mpjpe_m']:.4f} | weights {np.round(wmean, 3).tolist()}", flush=True)
+        print(f"[fold {fold}] learned(last) {MM*agg['mpjpe_m']:.1f}/{MM*agg['pa_mpjpe_m']:.1f} mm | mean {MM*anchors['fuse_mean']['mpjpe_m']:.1f}/{MM*anchors['fuse_mean']['pa_mpjpe_m']:.1f} | best single {MM*anchors['best_single_oracle']['mpjpe_m']:.1f} | weights {np.round(wmean, 3).tolist()}", flush=True)
 
 
 # ------------------------------------------------------------------ stress
@@ -534,7 +626,7 @@ def cmd_stress(args) -> None:
                 "fuse_mean_same_corruption": summarize(mean_rows),
                 "fuse_mean_excluding_view_oracle": excl,
             }
-            print(f"[fold {fold}] {args.mode:5s} {name:6s} learned {learned['mpjpe_m']:.4f}/{learned['pa_mpjpe_m']:.4f} w={np.round(wmean,3).tolist()} | mean {res[name]['fuse_mean_same_corruption']['mpjpe_m']:.4f}", flush=True)
+            print(f"[fold {fold}] {args.mode:5s} {name:6s} learned {MM*learned['mpjpe_m']:.1f}/{MM*learned['pa_mpjpe_m']:.1f} mm w={np.round(wmean,3).tolist()} | mean {MM*res[name]['fuse_mean_same_corruption']['mpjpe_m']:.1f}", flush=True)
         (fold_dir(args, fold) / f"stress_{args.mode}.json").write_text(json.dumps(res, indent=1, ensure_ascii=False))
 
 
@@ -567,9 +659,10 @@ def cmd_driveandact(args) -> None:
                 canon = {c: canonicalize_pose(np.stack([views[c][f][1] for f in w]).astype(np.float32)) for c in VIEWS}
                 vp_arr = np.stack([canon[c] for c in VIEWS], axis=2)  # (T,J,V,3)
                 conf = np.ones(vp_arr.shape[:3], dtype=np.float32)
-                fused, wts = model(torch.from_numpy(vp_arr).unsqueeze(0), torch.from_numpy(conf).unsqueeze(0))
-                fused = fused.squeeze(0).numpy()
-                wts = wts.squeeze(0).numpy()
+                fused, wts = model(torch.from_numpy(vp_arr).unsqueeze(0).to(DEVICE),
+                                   torch.from_numpy(conf).unsqueeze(0).to(DEVICE))
+                fused = fused.squeeze(0).float().cpu().numpy()
+                wts = wts.squeeze(0).float().cpu().numpy()
                 wsum += wts.reshape(-1, len(VIEWS)).sum(axis=0)
                 wn += wts.shape[0] * wts.shape[1]
                 preds["learned"].append(to_hs10(fused[None]).reshape(-1, len(HS10_NAMES), 3))
@@ -607,6 +700,44 @@ def cmd_driveandact(args) -> None:
     print("learned mean view weights:", overall["learned"]["mean_view_weights"])
 
 
+# ------------------------------------------------------------------ cross-dataset zero-shot
+
+
+def cmd_crosseval(args) -> None:
+    """Zero-shot transfer under the validation protocol of `train`.
+
+    Every fold model of --tag (trained on --cache-dir) is evaluated, without any update, on
+    the validation sequences of each fold of another dataset (--target-cache-dir /
+    --target-index-mapping): whole sequences, same compute_metrics, mean over the target
+    folds.  The numbers are therefore directly comparable with `learned_last` of a model
+    trained on the target dataset with the same fold files (unlike `driveandact`, which
+    scores 16-frame windows of the dense clips with hs10 PA only).
+    """
+    n_target = len(sorted(Path(args.target_index_mapping).glob("fold_*.json")))
+    stores = [SeqStore(args.target_cache_dir, load_fold_pairs(args.target_index_mapping, tf)[1]) for tf in range(n_target)]
+    anchors = [training_free_rows(st, args.pck)["fuse_mean"] for st in stores]
+    keys = ("mpjpe_m", "pa_mpjpe_m")
+    for fold in args.folds:
+        model = load_fold_model(args, fold)
+        per = []
+        for tf, st in enumerate(stores):
+            rows, wmean = learned_rows(model, st, args.pck)
+            agg = summarize(rows)
+            agg["groups"] = group_mpjpe(rows)
+            per.append({"target_fold": tf, "learned": agg, "fuse_mean": anchors[tf],
+                        "mean_view_weights": dict(zip(VIEWS, wmean.tolist())), "per_sequence_learned": rows})
+        payload = {
+            "source_fold": fold, "target": args.target_name, "target_cache_dir": str(args.target_cache_dir),
+            "learned_mean": {k: float(np.mean([p["learned"][k] for p in per])) for k in keys},
+            "fuse_mean_mean": {k: float(np.mean([p["fuse_mean"][k] for p in per])) for k in keys},
+            "target_folds": per,
+        }
+        (fold_dir(args, fold) / f"crosseval_{args.target_name}.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False))
+        lm, fm = payload["learned_mean"], payload["fuse_mean_mean"]
+        print(f"[fold {fold}] zero-shot on {args.target_name}: learned {MM*lm['mpjpe_m']:.1f}/{MM*lm['pa_mpjpe_m']:.1f} mm | "
+              f"mean {MM*fm['mpjpe_m']:.1f}/{MM*fm['pa_mpjpe_m']:.1f}", flush=True)
+
+
 # ------------------------------------------------------------------ summarize
 
 
@@ -638,17 +769,18 @@ def cmd_summarize(args) -> None:
                     g[k].append(agg["groups"].get(k, float("nan")))
         if r.get("uncertainty_calibration"):
             calib.append(r["uncertainty_calibration"])
-    lines = [f"folds: {folds}", "", "| method | MPJPE (m) | PA-MPJPE (m) | PCK@0.10 |", "|---|---|---|---|"]
+    lines = [f"folds: {folds}", "", "| method | MPJPE (mm) | PA-MPJPE (mm) | PCK@100mm |", "|---|---|---|---|"]
     for name, t in table.items():
-        f = lambda v: f"{np.mean(v):.4f} ± {np.std(v):.4f}"
-        lines.append(f"| {name} | {f(t['mpjpe'])} | {f(t['pa'])} | {f(t['pck10'])} |")
+        f = lambda v: f"{MM * np.mean(v):.1f} ± {MM * np.std(v):.1f}"   # errors, mm
+        fp = lambda v: f"{np.mean(v):.4f} ± {np.std(v):.4f}"            # PCK, fraction
+        lines.append(f"| {name} | {f(t['mpjpe'])} | {f(t['pa'])} | {fp(t['pck10'])} |")
     if groups:
-        lines += ["", "| method | head | shoulders/neck | body | hands |", "|---|---|---|---|---|"]
+        lines += ["", "| method (group MPJPE, mm) | head | shoulders/neck | body | hands |", "|---|---|---|---|---|"]
         for name, g in groups.items():
-            lines.append(f"| {name} | " + " | ".join(f"{np.nanmean(g[k]):.4f}" for k in JOINT_GROUPS) + " |")
+            lines.append(f"| {name} | " + " | ".join(f"{MM * np.nanmean(g[k]):.1f}" for k in JOINT_GROUPS) + " |")
     if calib:
         lines += ["", f"uncertainty calibration (mean over folds): spearman(scale, error)={np.mean([c['spearman_scale_vs_error'] for c in calib]):.3f}, "
-                  f"error most-confident decile {np.mean([c['err_most_confident_decile'] for c in calib]):.4f} vs least-confident {np.mean([c['err_least_confident_decile'] for c in calib]):.4f} (all {np.mean([c['err_all'] for c in calib]):.4f})"]
+                  f"error most-confident decile {MM*np.mean([c['err_most_confident_decile'] for c in calib]):.1f} mm vs least-confident {MM*np.mean([c['err_least_confident_decile'] for c in calib]):.1f} mm (all {MM*np.mean([c['err_all'] for c in calib]):.1f} mm)"]
     w = np.array(weights)
     lines.append("")
     lines.append(f"learned mean view weights (front/left/right): {np.round(w.mean(0), 3).tolist()} ± {np.round(w.std(0), 3).tolist()}")
@@ -657,14 +789,14 @@ def cmd_summarize(args) -> None:
         files = [p for p in files if p.exists()]
         if not files:
             continue
-        lines += ["", f"### view corruption: {mode} (mean over {len(files)} folds)", "", "| condition | learned MPJPE | learned PA | weight on corrupted view | mean-fusion MPJPE (same corruption) | mean excl. view (oracle) |", "|---|---|---|---|---|---|"]
+        lines += ["", f"### view corruption: {mode} (mean over {len(files)} folds)", "", "| condition | learned MPJPE (mm) | learned PA (mm) | weight on corrupted view | mean-fusion MPJPE, same corruption (mm) | mean excl. view, oracle (mm) |", "|---|---|---|---|---|---|"]
         for cond in ("clean", *VIEWS):
             vals = [json.loads(p.read_text())[cond] for p in files]
             g = lambda key: np.mean([v["learned"][key] for v in vals])
             wv = [v["weight_on_corrupted_view"] for v in vals if v["weight_on_corrupted_view"] is not None]
             mm = np.mean([v["fuse_mean_same_corruption"]["mpjpe_m"] for v in vals])
             ex = [v["fuse_mean_excluding_view_oracle"]["mpjpe_m"] for v in vals if v["fuse_mean_excluding_view_oracle"]]
-            lines.append(f"| {cond} | {g('mpjpe_m'):.4f} | {g('pa_mpjpe_m'):.4f} | {(np.mean(wv) if wv else float('nan')):.3f} | {mm:.4f} | {(np.mean(ex) if ex else float('nan')):.4f} |")
+            lines.append(f"| {cond} | {MM*g('mpjpe_m'):.1f} | {MM*g('pa_mpjpe_m'):.1f} | {(np.mean(wv) if wv else float('nan')):.3f} | {MM*mm:.1f} | {(MM*np.mean(ex) if ex else float('nan')):.1f} |")
     da = [base / f"fold{f}" / "driveandact.json" for f in folds]
     da = [p for p in da if p.exists()]
     if da:
@@ -698,7 +830,9 @@ def main() -> None:
     ap.add_argument("--residual-hidden", type=int, default=0, help=">0: add a per-joint residual refinement MLP of this width")
     ap.add_argument("--residual-uncertainty", action="store_true",
                     help="residual head also predicts per-joint Laplace log-scale (trained with masked NLL)")
-    ap.add_argument("--model", choices=("learned", "setfusion", "tripose"), default="learned")
+    ap.add_argument("--model", choices=("learned", "setfusion", "setres", "tripose", *BASELINES), default="learned",
+                    help="fusion model; tf_* / concat_mlp / lift_mlp / tcn / skel_tr are comparison baselines (fusion_baselines.py)")
+    ap.add_argument("--device", default="auto", help="auto (cuda if available) | cpu | cuda")
     ap.add_argument("--refiner-dim", type=int, default=128, help="tripose: TCN channel width")
     ap.add_argument("--tripose-velocity", action="store_true", help="tripose: keep multi-scale velocity features")
     ap.add_argument("--no-cross-view-attention", action="store_true", help="tripose: disable cross-view attention")
@@ -729,11 +863,21 @@ def main() -> None:
     d.add_argument("--da-root", type=Path, default=DEFAULT_DA_ROOT)
     d.set_defaults(func=cmd_driveandact)
 
+    x = sub.add_parser("crosseval", help="zero-shot: evaluate the fold models of --tag on another dataset's validation folds")
+    x.add_argument("--folds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
+    x.add_argument("--target-cache-dir", type=Path, default=DEFAULT_DA_CACHE)
+    x.add_argument("--target-index-mapping", type=Path, default=DEFAULT_DA_INDEX)
+    x.add_argument("--target-name", type=str, default="driveandact")
+    x.set_defaults(func=cmd_crosseval)
+
     m = sub.add_parser("summarize")
     m.set_defaults(func=cmd_summarize)
 
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
+    global DEVICE
+    DEVICE = torch.device(("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device)
+    print(f"device: {DEVICE}", flush=True)
     args.func(args)
 
 

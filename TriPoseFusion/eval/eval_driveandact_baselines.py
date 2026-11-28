@@ -177,8 +177,8 @@ def main() -> None:
         pooled_valid.append(valid_arr)
         results[f"{vp}/{run}"] = run_res
         print(f"{vp}/{run}: {len(fids)} frames, "
-              f"fuse_mean MPJPE={run_res['fuse_mean']['body14']['mpjpe_m']:.4f} "
-              f"PA={run_res['fuse_mean']['body14']['pa_mpjpe_m']:.4f}", flush=True)
+              f"fuse_mean MPJPE={1000*run_res['fuse_mean']['body14']['mpjpe_m']:.1f} "
+              f"PA={1000*run_res['fuse_mean']['body14']['pa_mpjpe_m']:.1f} mm", flush=True)
 
     if pooled_gt:
         gt_all = np.concatenate(pooled_gt)
@@ -191,8 +191,8 @@ def main() -> None:
         print("\n== OVERALL (pooled) ==")
         for name, res in overall.items():
             c, u = res["body14"], res["upper12"]
-            print(f"{name:14s} body14: MPJPE={c['mpjpe_m']:.4f} PA={c['pa_mpjpe_m']:.4f} | "
-                  f"upper12: MPJPE={u['mpjpe_m']:.4f} PA={u['pa_mpjpe_m']:.4f}", flush=True)
+            print(f"{name:14s} body14: MPJPE={1000*c['mpjpe_m']:.1f} PA={1000*c['pa_mpjpe_m']:.1f} mm | "
+                  f"upper12: MPJPE={1000*u['mpjpe_m']:.1f} PA={1000*u['pa_mpjpe_m']:.1f} mm", flush=True)
 
     out = args.output_dir / "driveandact_baselines.json"
     out.write_text(json.dumps(results, indent=2))

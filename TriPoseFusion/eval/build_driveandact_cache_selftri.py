@@ -49,7 +49,7 @@ def triangulate_batch(norm: dict, cams: dict) -> np.ndarray:
     return X[..., :3] / X[..., 3:4]
 
 
-def build_run(da_root: Path, calib_root: Path, vp: str, run: str, out_dir: Path, rpe_px: float) -> dict:
+def build_run(da_root: Path, calib_root: Path, vp: str, run: str, out_dir: Path, rpe_px: float, rigs: dict | None = None) -> dict:
     gt, gt_valid = load_gt(da_root / "gt" / vp / f"{run}.npz")
     views = {c: load_view(da_root / "sam3d" / vp / run / c) for c in VIEWS}
     ok = set(gt)
@@ -64,6 +64,9 @@ def build_run(da_root: Path, calib_root: Path, vp: str, run: str, out_dir: Path,
     # ---- 自三角化参考（世界系, 米）+ 重投影质量过滤 ----
     cams = {v: Camera.from_json(calib_root / vdir / vp / f"{run}.{ids}.calibration.json")
             for v, (vdir, ids) in VIEW_CAMS.items()}
+    if rigs is not None:  # self-calibrated extrinsics (driveandact_selfcalib.py --rigs-out); intrinsics stay official
+        ext = rigs[f"{vp}/{run}"]["extrinsics"]
+        cams = {v: Camera(np.asarray(ext[v]["R"]), np.asarray(ext[v]["t"]), cams[v].K, cams[v].dist) for v in VIEWS}
     norm = {v: cams[v].undistort(raw2d[v].reshape(-1, 2)).reshape(t_n, j_n, 2) for v in VIEWS}
     tri = triangulate_batch(norm, cams)  # (T,52,3)
     res = np.zeros((t_n, j_n, len(VIEWS)))
@@ -139,14 +142,17 @@ def main() -> None:
     ap.add_argument("--da-root", type=Path, default=Path("/work/1/SKIING/chenkaixu/data/drive/driveandact/tripose_eval_dense"))
     ap.add_argument("--calib-root", type=Path, default=Path("/work/1/SKIING/chenkaixu/data/drive/driveandact"))
     ap.add_argument("--out-dir", type=Path, default=Path("/work/1/SKIING/chenkaixu/data/drive/learned_fusion_cache_driveandact_selftri"))
+    ap.add_argument("--extrinsics-json", type=Path, default=None,
+                    help="replace the official extrinsics by self-calibrated ones (driveandact_selfcalib.py --rigs-out)")
     ap.add_argument("--rpe-px", type=float, default=40.0, help="三角化质量过滤: 所有视角重投影残差 ≤ 此值 (自有流水线为 40 px)")
     args = ap.parse_args()
     infos = []
+    rigs = json.loads(args.extrinsics_json.read_text()) if args.extrinsics_json else None
     for gt_npz in sorted((args.da_root / "gt").glob("vp*/*.npz")):
         vp, run = gt_npz.parent.name, gt_npz.stem
         if not all((args.da_root / "sam3d" / vp / run / c).is_dir() for c in VIEWS):
             continue
-        info = build_run(args.da_root, args.calib_root, vp, run, args.out_dir, args.rpe_px)
+        info = build_run(args.da_root, args.calib_root, vp, run, args.out_dir, args.rpe_px, rigs)
         infos.append(info)
         print(info, flush=True)
     (args.out_dir / "summary.json").write_text(json.dumps(infos, indent=1))

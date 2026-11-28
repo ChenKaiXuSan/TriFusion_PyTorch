@@ -66,7 +66,7 @@ def main() -> None:
     out_path = args.output or args.results.with_name(args.results.stem + "_joint_groups.json")
     out_path.write_text(json.dumps(out, indent=2, ensure_ascii=False))
     for g, s in summary.items():
-        print(f"{g:15s} MPJPE {s['mpjpe_m']:.4f}  (n={s['num_sequences']})")
+        print(f"{g:15s} MPJPE {1000*s['mpjpe_m']:.1f} mm  (n={s['num_sequences']})")
     print(f"wrote {out_path}")
 
 

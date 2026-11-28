@@ -1,5 +1,9 @@
 # TriFusion 结果总表（2026-08-30 汇总）
 
+> **历史文档（2026-08-30 的状态，数值未改动）**：本文除注明外单位为 **m**，学习型各行训练量不统一。
+> 现行结果与 mm 口径见 `results_summary_2026-11-27.md`；本文仍是 §0（论文原数字 → 修正度量 → 正确 GT）、
+> §4–§6（Drive&Act 免训练与三角化基线）的出处。
+
 数字来源：`review_fix_plan.md` §二·五～二·十、`results_perseqGT/table3_unified.md`、
 `driveandact_results/README.md`。除非注明，单位为 m；Drive&Act 为 mm。
 
